@@ -10,22 +10,31 @@ because in the cloud they're usually the same root cause.**
 > computation, lowers the cloud bill, and stops unnecessary CO₂.
 > **One action, three wins: security + cost + carbon.**
 
-A **cyber agent** and a **carbon agent** each scan a (simulated) construction
-cloud; an **orchestrator** correlates their findings into unified, prioritized,
-plain-language recommendations with concrete numbers (`$` saved, `kg CO₂e`
-prevented). Everything runs on a visible **Reason → Act → Observe (ReAct)** loop
-and is demoed through a live three-phase scenario:
+A **cyber agent** and a **carbon agent** continuously scan a (simulated)
+construction cloud; an **orchestrator** correlates their findings into unified,
+prioritized, plain-language recommendations with concrete numbers (`$` saved,
+`kg CO₂e` prevented). Everything runs on a visible **Reason → Act → Observe
+(ReAct)** loop and is demoed through a live three-phase scenario:
 **healthy baseline → attack + carbon surge → one-click remediation.**
+
+A background monitor re-scans the fleet every few seconds (not just on click),
+so detection is genuinely *continuous*, and every remediation is **verified by
+re-scanning** rather than assumed.
 
 ---
 
 ## What's real vs. simulated
 
-- ✅ **Real** detection logic (security rules + a physical power/carbon model).
+- ✅ **Real** detection logic (security rules + a non-linear power/carbon model
+  with regional PUE).
 - ✅ **Real** carbon data — the [Electricity Maps](https://www.electricitymaps.com/)
-  API, with a labeled fallback table when no key is present.
-- ✅ **Real** agent reasoning (Claude / Gemini) — with a deterministic fallback
-  so the demo always runs offline.
+  API (live grid intensity *and* last-24h history for green scheduling), with a
+  labeled fallback table when no key is present.
+- ✅ **Real** agent reasoning (Claude / Gemini), surfaced in the dashboard's
+  **AI Analysis** panel — with a deterministic fallback so the demo always runs
+  offline.
+- ✅ **Real** continuous monitoring (background re-scan) and **verified**
+  remediation (re-scan to confirm the fix worked).
 - 🧪 **Simulated** environment (`cloud_state.json`) and **simulated, local-only**
   attack. No real network or server is ever touched.
 
@@ -62,8 +71,65 @@ cloud_state.json  (the simulated construction cloud)
 | `attack_simulator.py` | Phase 2 — local attack signature injection |
 | `remediation.py` | Phase 3 — one-click heal |
 | `main.py` | The `rich` CLI demo |
-| `api.py` | FastAPI layer (incl. SSE stream) |
+| `api.py` | FastAPI layer (SSE stream + 6s continuous-monitor loop) |
 | `dashboard/` | React + Vite + Tailwind dashboard |
+
+### Data model (`cloud_state.json`)
+
+Each server carries the fields both domains need, plus the construction-specific
+business context:
+
+- *Sizing / carbon:* `instance_type`, `cpu_utilization`, `gpu_utilization`,
+  `runtime_hours_this_month`, `region`, `monthly_cost_usd`
+- *Security config:* `open_ports`, `ssh_exposed`, `encrypted_at_rest`,
+  `iam_scope`, `mfa_enabled`, `failed_login_attempts_last_hour`,
+  `last_credential_rotation_days`
+- *Business / governance:* `owner_subcontractor`,
+  `subcontractor_contract_active`, `scheduled_tasks`, **`data_residency`**
+  (sovereignty lock), **`dataset_size_gb`** (data-transit carbon),
+  **`asset_criticality`** (security-score weighting)
+
+---
+
+## Engineering depth & design decisions
+
+Things that are easy to get wrong in a PoC and how this project handles them:
+
+- **Continuous monitoring, not snapshots.** A background loop (`api.py
+  _monitor_loop`) re-scans every 6 s, diffs against the previous sweep, and
+  pushes only *changes* (new / escalated / cleared) plus a heartbeat over SSE —
+  it catches a change even if no one clicks anything.
+- **Deterministic detection, LLM judgment.** Detection rules (`tools.py`) are
+  pure and reproducible *on purpose* — you don't want an LLM guessing whether
+  port 22 is open. The LLM (Claude/Gemini) does the judgment layer: ranking,
+  good-carbon-vs-bad-carbon, and the plain-language analysis shown in the UI.
+- **Realistic carbon physics.** Power uses the non-linear Fan et al. (Google)
+  server model, not a straight line, and applies a **load-dependent regional
+  PUE** (datacenter cooling) — so the same workload emits more in hot Singapore
+  (PUE ≈ 1.5) than in cold Sweden (≈ 1.1). Grid intensity is live from
+  Electricity Maps.
+- **Sovereignty- & transit-aware green scheduling.** Relocation isn't blindly
+  recommended: the engine accounts for the **carbon cost of moving the dataset**
+  and refuses cross-border moves for **residency-locked** blueprint data —
+  time-shifting in-region instead. The time-shift saving is computed from each
+  grid's **real last-24h swing** (Electricity Maps history), not a constant.
+- **Verified remediation.** Heal is modelled as discrete IR steps (isolate →
+  kill process → rotate credentials) where killing the process is what lowers
+  CPU; the host then settles into its legitimate operating range (not a frozen
+  snapshot replay). It then **re-scans to verify** — a partial heal (rotate
+  creds only) correctly *fails* verification because the miner is still running.
+- **Asset-weighted security score.** Findings are weighted by
+  `asset_criticality`, and a compromised *critical* asset hard-caps the score —
+  so a large fleet can't dilute one core breach into a falsely passing grade,
+  and minor issues on disposable nodes don't crater it to zero.
+- **Concurrency-safe state.** `state_store.py` serializes read-modify-write with
+  a reentrant lock and writes atomically (temp file + `os.replace`), so the
+  monitor loop and user actions can't corrupt `cloud_state.json`.
+
+*Known roadmap (not bottlenecks at demo scale):* the monitor scans the fleet
+serially — fine for 10 nodes (carbon lookups are cached per region); scaling to
+thousands of nodes would move to a concurrent pipeline + incremental/sampled
+streaming.
 
 ---
 
@@ -107,8 +173,13 @@ server proxies `/api` to the backend on `:8000`.
 2. **⚠ Simulate Attack** — a local attack signature hits the target → UI slams
    to **CRITICAL**: red takeover, carbon spikes, the compromised host flashes,
    agents detect & correlate live, the compound incident appears.
-3. **Heal** — one-click remediation → **HEALED**: carbon drops, status returns
-   to green, and a final savings report slides in.
+3. **Heal** — one-click remediation (isolate → kill process → rotate creds) is
+   re-scanned to **verify** → **HEALED**: carbon drops, status returns to green,
+   and a verified savings report slides in.
+
+Throughout, the **Agent Reasoning** feed streams live Reason→Act→Observe steps
+(including the monitor's heartbeat), and the **AI Analysis** panel shows the
+LLM's security/carbon summaries.
 
 ---
 
