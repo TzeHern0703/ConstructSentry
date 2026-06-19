@@ -23,7 +23,7 @@ Every detection function returns either None (no problem) or a finding dict:
 
 from __future__ import annotations
 
-from carbon_data import get_carbon_intensity, greenest_region
+from carbon_data import get_carbon_intensity, get_pue, greenest_region
 
 # --- Severity ordering (used by the orchestrator to rank) ------------------
 
@@ -181,6 +181,12 @@ DEFAULT_MAX_WATTS = 250
 # A server still draws this fraction of peak power even when idle.
 IDLE_POWER_FLOOR = 0.35
 
+# Server power does NOT scale linearly with utilization. We use the Fan et al.
+# (Google, 2007) empirical model f(u) = 2u - u^r, which matches measured machine
+# power far better than a straight line (power rises fast at low load, then
+# compresses near peak). r ~ 1.4.
+POWER_CURVE_EXPONENT = 1.4
+
 # Instances at or above this peak draw are considered "large" for the
 # over-provisioning check.
 LARGE_INSTANCE_WATTS = 600
@@ -188,6 +194,96 @@ LARGE_INSTANCE_WATTS = 600
 # Role keywords that indicate a deferrable / batch workload (can be moved to a
 # greener region or scheduled when the grid is clean).
 DEFERRABLE_KEYWORDS = ("render", "archive", "calc", "sync", "batch", "reconcil")
+
+# Energy intensity of long-haul data transfer (kWh per GB moved between
+# regions). Relocating a workload is not free: moving its dataset across
+# submarine cables / routers burns energy too. ~0.06 kWh/GB is a commonly cited
+# figure for wide-area transfer.
+NETWORK_KWH_PER_GB = 0.06
+
+# A deferrable job time-shifted to the grid's greenest hours (in-region, no data
+# movement) can avoid roughly this fraction of its carbon — a conservative take
+# on intraday grid-intensity swings.
+TIME_SHIFT_SAVING_FRACTION = 0.20
+
+
+def is_relocatable(server):
+    """True only if the data has no residency lock (can legally move regions)."""
+    return server.get("data_residency", "none") in (None, "none", "")
+
+
+def transit_carbon_kg(dataset_gb, source_intensity):
+    """One-time carbon cost of moving a dataset out of its region."""
+    return dataset_gb * NETWORK_KWH_PER_GB * source_intensity / 1000.0
+
+
+def _greening_plan(server, carbon, intensity):
+    """Decide how to cut a deferrable workload's carbon WITHOUT killing it.
+
+    Accounts for (a) data-transit carbon — relocation must net-save after the
+    one-time transfer cost — and (b) data sovereignty — blueprint/regulated data
+    cannot be moved cross-border, so we time-shift in-region instead.
+
+    Returns (action_text, metrics_dict).
+    """
+    g_region, g_value = greenest_region()
+    greener_kg = round(carbon["power_kwh"] * g_value / 1000.0, 1)
+    gross_savings = round(carbon["carbon_kg"] - greener_kg, 1)
+    dataset_gb = server.get("dataset_size_gb", 0)
+    transit_kg = round(transit_carbon_kg(dataset_gb, intensity.gco2_per_kwh), 1)
+    shift_kg = round(carbon["carbon_kg"] * TIME_SHIFT_SAVING_FRACTION, 1)
+
+    # 1) Data sovereignty: residency-locked data must not move cross-border.
+    if not is_relocatable(server):
+        residency = server.get("data_residency")
+        action = (
+            f"Data is residency-locked to {residency} — relocating to "
+            f"{g_region} would save ~{gross_savings} kg/mo but is barred by data "
+            f"sovereignty (and would cost ~{transit_kg} kg one-time transit for "
+            f"{dataset_gb} GB). Instead, time-shift this deferrable job to the "
+            f"grid's greenest hours in-region: ~{shift_kg} kg/mo, no data moved."
+        )
+        return action, {
+            "plan": "time_shift",
+            "residency_locked": True,
+            "residency": residency,
+            "relocate_to": g_region,
+            "gross_relocate_kg": gross_savings,
+            "transit_kg": transit_kg,
+            "savings_kg": shift_kg,
+        }
+
+    # 2) Relocatable, but only if it net-saves after transit carbon.
+    net = round(gross_savings - transit_kg, 1)
+    if net <= 0:
+        action = (
+            f"Keep in-region: relocating to {g_region} would save only "
+            f"~{gross_savings} kg/mo but moving {dataset_gb} GB costs ~{transit_kg} "
+            f"kg transit (net {net} kg). Time-shift to greener hours instead: "
+            f"~{shift_kg} kg/mo."
+        )
+        return action, {
+            "plan": "time_shift",
+            "residency_locked": False,
+            "relocate_to": g_region,
+            "gross_relocate_kg": gross_savings,
+            "transit_kg": transit_kg,
+            "savings_kg": shift_kg,
+        }
+
+    action = (
+        f"Relocate this deferrable workload to {g_region} ({g_value:.0f} "
+        f"gCO2/kWh). Net ~{net} kg/mo saved after a one-time ~{transit_kg} kg "
+        f"transit for {dataset_gb} GB."
+    )
+    return action, {
+        "plan": "relocate",
+        "residency_locked": False,
+        "relocate_to": g_region,
+        "gross_relocate_kg": gross_savings,
+        "transit_kg": transit_kg,
+        "savings_kg": net,
+    }
 
 
 def _utilization_fraction(server):
@@ -202,19 +298,30 @@ def _utilization_fraction(server):
     return cpu
 
 
-def estimate_power_kwh(server):
-    """Estimate this server's energy use for the month, in kWh.
+def _power_fraction(util):
+    """Non-linear server power curve (Fan et al.): f(u) = 2u - u^1.4, in [0,1]."""
+    u = max(0.0, min(util, 1.0))
+    return max(0.0, 2 * u - u ** POWER_CURVE_EXPONENT)
 
-    power = max_watts * (idle_floor + (1 - idle_floor) * utilization)
-    kWh   = power_watts * runtime_hours / 1000
+
+def estimate_power_kwh(server, include_pue=True):
+    """Estimate this server's FACILITY energy use for the month, in kWh.
+
+    IT power uses a non-linear curve:
+        it_watts = max_watts * (idle_floor + (1 - idle_floor) * f(utilization))
+    Facility power then applies the region's load-dependent PUE (cooling):
+        facility_watts = it_watts * PUE(region, utilization)
+    kWh = facility_watts * runtime_hours / 1000
     """
     max_watts = INSTANCE_MAX_WATTS.get(
         server.get("instance_type"), DEFAULT_MAX_WATTS
     )
     util = _utilization_fraction(server)
-    power_watts = max_watts * (IDLE_POWER_FLOOR + (1 - IDLE_POWER_FLOOR) * util)
+    it_watts = max_watts * (IDLE_POWER_FLOOR + (1 - IDLE_POWER_FLOOR) * _power_fraction(util))
     runtime = server.get("runtime_hours_this_month", 0)
-    return power_watts * runtime / 1000.0
+    if include_pue:
+        it_watts *= get_pue(server.get("region"), util)
+    return it_watts * runtime / 1000.0
 
 
 def compute_server_carbon(server):
@@ -226,10 +333,12 @@ def compute_server_carbon(server):
     power_kwh = estimate_power_kwh(server)
     intensity = get_carbon_intensity(server["region"])
     carbon_kg = power_kwh * intensity.gco2_per_kwh / 1000.0
+    pue = get_pue(server.get("region"), _utilization_fraction(server))
     return {
         "server_id": server["id"],
         "power_kwh": round(power_kwh, 1),
         "carbon_kg": round(carbon_kg, 1),
+        "pue": pue,
         "intensity_gco2_kwh": intensity.gco2_per_kwh,
         "intensity_source": intensity.source,
         "intensity_label": intensity.label(),
@@ -290,24 +399,18 @@ def check_zombie(server):
 
 
 def check_high_carbon_region(server):
-    """Flag a deferrable workload running on a high-carbon grid."""
+    """Flag a deferrable workload on a high-carbon grid, with a transit- and
+    sovereignty-aware greening plan (relocate vs time-shift)."""
     intensity = get_carbon_intensity(server["region"])
     if intensity.is_dirty and is_deferrable(server):
-        g_region, g_value = greenest_region()
         carbon = compute_server_carbon(server)
-        # Carbon if the same energy ran on the greenest grid.
-        greener_kg = round(carbon["power_kwh"] * g_value / 1000.0, 1)
-        savings_kg = round(carbon["carbon_kg"] - greener_kg, 1)
+        action, plan = _greening_plan(server, carbon, intensity)
         return make_finding(
             server, "HIGH_CARBON_REGION", "info",
             f"{server['id']} runs a deferrable workload in {server['region']} "
-            f"({intensity.gco2_per_kwh:.0f} gCO2/kWh). Relocating to "
-            f"{g_region} ({g_value:.0f} gCO2/kWh) would cut "
-            f"~{savings_kg} kg CO2e/mo with no loss of capacity.",
+            f"({intensity.gco2_per_kwh:.0f} gCO2/kWh). {action}",
             "check_high_carbon_region", "carbon",
-            carbon_kg=carbon["carbon_kg"],
-            relocate_to=g_region,
-            savings_kg=savings_kg,
+            carbon_kg=carbon["carbon_kg"], **plan,
         )
     return None
 
@@ -329,14 +432,21 @@ def check_good_vs_bad_carbon(server):
     failed_logins = server.get("failed_login_attempts_last_hour", 0)
     carbon = compute_server_carbon(server)
 
-    if not active_tasks and failed_logins > 100:
-        # BAD carbon — high load with no legitimate cause + attack signature.
+    if not active_tasks:
+        # BAD carbon — sustained high load with no legitimate cause is itself the
+        # crypto-mining signature. Failed logins corroborate an active intrusion
+        # but are NOT required: once the attacker is in, the miner keeps running
+        # even after the brute force stops (so rotating creds alone won't clear
+        # it — only killing the process does).
+        attack_note = (
+            f" and {failed_logins} failed logins" if failed_logins > 100 else ""
+        )
         return make_finding(
             server, "BAD_CARBON_COMPROMISE", "critical",
             f"{server['id']} is pinned at {cpu}% CPU with NO active scheduled "
-            f"task and {failed_logins} failed logins — this is unexplained, "
-            f"unauthorized compute consistent with a hijacked crypto-mining "
-            f"host. Likely COMPROMISED: kill it (security + carbon + cost).",
+            f"task{attack_note} — unexplained, unauthorized compute consistent "
+            f"with a hijacked crypto-mining host. Likely COMPROMISED: kill the "
+            f"process (security + carbon + cost).",
             "check_good_vs_bad_carbon", "carbon",
             carbon_kg=carbon["carbon_kg"],
             monthly_cost_usd=carbon["monthly_cost_usd"],
@@ -345,22 +455,16 @@ def check_good_vs_bad_carbon(server):
         )
 
     if active_tasks:
-        # GOOD carbon — real work; relocate rather than kill.
-        g_region, g_value = greenest_region()
+        # GOOD carbon — real work; green it rather than kill it.
         intensity = get_carbon_intensity(server["region"])
-        greener_kg = round(carbon["power_kwh"] * g_value / 1000.0, 1)
-        savings_kg = round(carbon["carbon_kg"] - greener_kg, 1)
+        action, plan = _greening_plan(server, carbon, intensity)
         return make_finding(
             server, "GOOD_CARBON", "info",
             f"{server['id']} is at {cpu}% CPU doing legitimate work "
             f"('{active_tasks[0]['task']}'). This is GOOD carbon — keep it "
-            f"running, but it sits on a {intensity.gco2_per_kwh:.0f} gCO2/kWh "
-            f"grid. Routing to {g_region} would save ~{savings_kg} kg CO2e/mo.",
+            f"running. {action}",
             "check_good_vs_bad_carbon", "carbon",
-            carbon_kg=carbon["carbon_kg"],
-            relocate_to=g_region,
-            savings_kg=savings_kg,
-            verdict="good",
+            carbon_kg=carbon["carbon_kg"], verdict="good", **plan,
         )
     return None
 

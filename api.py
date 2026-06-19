@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,8 +81,68 @@ def _refresh(state=None, emit=None) -> dict:
     state = state or state_store.load_state()
     results = orchestrator.run(state, emit=emit)
     summary = orchestrator.summarize(state, results)
-    _LAST = {"results": results, "summary": summary}
+    _LAST = {"results": results, "summary": summary, "ts": time.time()}
     return _LAST
+
+
+# --- Continuous monitoring (#1) -------------------------------------------
+# A background loop re-scans the environment on a fixed interval — not just when
+# the user clicks. It diffs against the previous scan and pushes only changes
+# (new / escalated / cleared incidents) plus a heartbeat, so the system does
+# real continuous monitoring rather than on-demand snapshots.
+
+MONITOR_INTERVAL_SECONDS = 6
+_prev_sig: dict[str, tuple[str, str]] = {}
+_SEV_RANK = {"info": 0, "warning": 1, "critical": 2}
+
+
+def _incident_signature(results: dict) -> dict:
+    return {
+        i["server_id"]: (i["category"], i["severity"])
+        for i in results["orchestrator"]["incidents"]
+    }
+
+
+async def _monitor_loop():
+    global _LAST, _prev_sig
+    loop = asyncio.get_running_loop()
+    while True:
+        await asyncio.sleep(MONITOR_INTERVAL_SECONDS)
+        try:
+            state = await loop.run_in_executor(None, state_store.load_state)
+            results = await loop.run_in_executor(None, orchestrator.quick_results, state)
+            summary = orchestrator.summarize(state, results)
+            _LAST = {"results": results, "summary": summary, "ts": time.time()}
+
+            sig = _incident_signature(results)
+            for sid, (cat, sev) in sig.items():
+                prev = _prev_sig.get(sid)
+                if prev is None:
+                    broker.publish({"agent": "monitor", "phase": "observe",
+                                    "text": f"New incident: {sid} — {cat} ({sev}).",
+                                    "severity": sev})
+                elif _SEV_RANK.get(sev, 0) > _SEV_RANK.get(prev[1], 0):
+                    broker.publish({"agent": "monitor", "phase": "observe",
+                                    "text": f"{sid} escalated to {sev} ({cat}).",
+                                    "severity": sev})
+            for sid in _prev_sig:
+                if sid not in sig:
+                    broker.publish({"agent": "monitor", "phase": "observe",
+                                    "text": f"{sid} cleared — back to nominal.",
+                                    "severity": "info"})
+            _prev_sig = sig
+
+            # Heartbeat so the feed visibly shows the monitor is always running.
+            broker.publish({
+                "agent": "monitor", "phase": "reason",
+                "text": (f"sweep · {len(state['servers'])} nodes · "
+                         f"{summary['total_carbon_kg']:.0f} kg CO2e · "
+                         f"{summary['system_status']} · {len(sig)} active"),
+                "severity": "critical" if summary["system_status"] == "CRITICAL" else "info",
+            })
+        except Exception as exc:
+            broker.publish({"agent": "monitor", "phase": "observe",
+                            "text": f"monitor error: {exc}", "severity": "info"})
 
 
 def _ensure() -> dict:
@@ -102,9 +163,10 @@ def _findings_payload(last: dict) -> dict:
 
 
 @app.on_event("startup")
-def _startup():
+async def _startup():
     state_store.ensure_baseline()
     _refresh()
+    asyncio.create_task(_monitor_loop())
 
 
 # ===========================================================================
@@ -126,7 +188,12 @@ def get_findings():
 @app.get("/api/summary")
 def get_summary():
     """Totals: security score, total carbon, total cost, # critical, status."""
-    return _ensure()["summary"]
+    last = _ensure()
+    return {
+        **last["summary"],
+        "last_updated": last.get("ts"),
+        "monitor_interval_s": MONITOR_INTERVAL_SECONDS,
+    }
 
 
 @app.post("/api/scan")
@@ -160,12 +227,17 @@ async def post_attack():
 
 
 @app.post("/api/remediate")
-async def post_remediate():
-    """Trigger remediation, restore safe state, return result + savings."""
+async def post_remediate(steps: str | None = None):
+    """Trigger remediation, re-scan to verify, return result + savings.
+
+    Optional ?steps=rotate_credentials (comma-separated) runs a partial heal to
+    demonstrate the failure mode (the miner survives credential rotation).
+    """
+    step_list = [s.strip() for s in steps.split(",")] if steps else None
     loop = asyncio.get_running_loop()
     emit = _make_emit(loop)
     report = await loop.run_in_executor(
-        None, lambda: remediation.remediate(emit=emit)
+        None, lambda: remediation.remediate(emit=emit, steps=step_list)
     )
     last = await loop.run_in_executor(None, lambda: _refresh(report["state"], emit))
     broker.publish({"agent": "system", "phase": "done",

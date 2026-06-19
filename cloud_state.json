@@ -26,7 +26,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "APAC",
+      "dataset_size_gb": 800
     },
     {
       "id": "fieldwire-api-prod",
@@ -54,7 +56,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "none",
+      "dataset_size_gb": 120
     },
     {
       "id": "ontrack-asset-db",
@@ -83,7 +87,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "EU",
+      "dataset_size_gb": 400
     },
     {
       "id": "nuron-iot-ingestion",
@@ -112,7 +118,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "none",
+      "dataset_size_gb": 200
     },
     {
       "id": "profis-engineering-calc",
@@ -140,7 +148,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "none",
+      "dataset_size_gb": 50
     },
     {
       "id": "sap-plm-sync",
@@ -168,7 +178,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "EU",
+      "dataset_size_gb": 300
     },
     {
       "id": "bim-archive-render-02",
@@ -196,7 +208,9 @@
           "active": false
         }
       ],
-      "status": "warning"
+      "status": "warning",
+      "data_residency": "APAC",
+      "dataset_size_gb": 2000
     },
     {
       "id": "blueline-staging-07",
@@ -220,7 +234,9 @@
       "owner_subcontractor": "BlueLine Plumbing",
       "subcontractor_contract_active": false,
       "scheduled_tasks": [],
-      "status": "warning"
+      "status": "warning",
+      "data_residency": "none",
+      "dataset_size_gb": 100
     },
     {
       "id": "legacy-docs-share-03",
@@ -250,7 +266,9 @@
           "active": true
         }
       ],
-      "status": "warning"
+      "status": "warning",
+      "data_residency": "none",
+      "dataset_size_gb": 60
     },
     {
       "id": "bim-render-prod-02",
@@ -269,8 +287,8 @@
       "encrypted_at_rest": true,
       "iam_scope": "scoped",
       "mfa_enabled": true,
-      "failed_login_attempts_last_hour": 0,
-      "last_credential_rotation_days": 0,
+      "failed_login_attempts_last_hour": 3,
+      "last_credential_rotation_days": 19,
       "owner_subcontractor": "Acme HVAC",
       "subcontractor_contract_active": true,
       "scheduled_tasks": [
@@ -279,7 +297,9 @@
           "active": true
         }
       ],
-      "status": "healthy"
+      "status": "healthy",
+      "data_residency": "APAC",
+      "dataset_size_gb": 600
     }
   ],
   "project_gantt": {

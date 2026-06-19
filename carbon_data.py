@@ -57,6 +57,33 @@ CARBON_INTENSITY_FALLBACK = {
 DEFAULT_INTENSITY = 475
 
 
+# Datacenter cooling overhead (PUE — Power Usage Effectiveness) by region.
+# Total facility power = IT power x PUE. Hot/humid climates spend far more energy
+# on cooling than cold ones (free cooling), so the SAME server emits more carbon
+# in Singapore than in Sweden even before grid intensity is considered.
+REGION_PUE = {
+    "ap-southeast-1": 1.50,   # Singapore — hot, humid
+    "ap-southeast-3": 1.55,   # Indonesia — hot, humid
+    "us-east-1": 1.20,        # N. Virginia — temperate
+    "eu-west-1": 1.15,        # Ireland — cool maritime
+    "eu-north-1": 1.10,       # Sweden — cold, free cooling
+    "ca-central-1": 1.10,     # Canada (Quebec) — cold
+}
+DEFAULT_PUE = 1.40
+
+# PUE is not constant: as IT load rises the chillers work harder, so effective
+# PUE climbs with utilization. This is the "cooling penalty at high load" a
+# static average misses.
+COOLING_LOAD_SENSITIVITY = 0.12
+
+
+def get_pue(region: str, utilization: float = 0.0) -> float:
+    """Effective PUE for a region at a given 0..1 IT utilization."""
+    base = REGION_PUE.get(region, DEFAULT_PUE)
+    u = max(0.0, min(utilization, 1.0))
+    return round(base + COOLING_LOAD_SENSITIVITY * u, 3)
+
+
 @dataclass
 class CarbonIntensity:
     """Result of a carbon-intensity lookup."""

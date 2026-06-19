@@ -154,15 +154,30 @@ def _recommend(category, server, carbon, finding_types, metrics):
         ]
         return action, saved_usd, saved_co2, wins
 
-    # relocate (GOOD_CARBON / HIGH_CARBON_REGION)
-    relocate_to = metrics.get("relocate_to", "a greener region")
+    # Greening a deferrable workload (GOOD_CARBON / HIGH_CARBON_REGION):
+    # relocate vs time-shift, decided transit- and sovereignty-aware upstream.
     saved_co2 = metrics.get("savings_kg", round(co2 * 0.5, 1))
-    action = f"Route this deferrable workload to {relocate_to} (cleaner grid)."
-    wins = [
-        "Security: no change",
-        "Cost: ~$0/mo (same compute, greener grid)",
-        f"Carbon: ~{saved_co2} kg CO2e/mo cut by relocation",
-    ]
+    relocate_to = metrics.get("relocate_to", "a greener region")
+    transit_kg = metrics.get("transit_kg", 0)
+    if metrics.get("plan") == "relocate":
+        action = (
+            f"Relocate to {relocate_to} — net carbon win after the one-time "
+            f"~{transit_kg} kg data-transit cost."
+        )
+        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo net (after {transit_kg} kg transit)"
+    elif metrics.get("residency_locked"):
+        action = (
+            f"Data residency-locked to {metrics.get('residency')}: cannot move "
+            f"cross-border. Time-shift to the grid's greenest hours in-region."
+        )
+        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift (no data moved)"
+    else:
+        action = (
+            "Transit carbon would cancel the relocation gain — time-shift to "
+            "greener hours in-region instead."
+        )
+        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift"
+    wins = ["Security: no change", "Cost: ~$0/mo (same compute)", carbon_win]
     return action, 0, saved_co2, wins
 
 
@@ -316,6 +331,42 @@ def summarize(state, results):
         "system_status": report["system_status"],
         "intensity_source": results["carbon"]["totals"]["intensity_source"],
     }
+
+
+def quick_results(state):
+    """Detection-only pipeline (no agent narratives / no LLM) for the continuous
+    monitor. Same result shape as run(), computed straight from tools.py so it's
+    cheap to call every few seconds."""
+    gantt = state.get("project_gantt", {})
+    cyber, carbon_findings = [], []
+    total_kwh = total_carbon = 0.0
+    source = "fallback"
+    for s in state["servers"]:
+        cyber.extend(tools.run_cyber_checks(s, gantt))
+        c = tools.compute_server_carbon(s)
+        total_kwh += c["power_kwh"]
+        total_carbon += c["carbon_kg"]
+        if c["intensity_source"] == "live":
+            source = "live"
+        carbon_findings.extend(tools.run_carbon_checks(s))
+
+    cyber_result = {
+        "agent": "cyber", "findings": cyber, "narrative": None,
+        "provider": "monitor",
+        "critical_count": sum(f["severity"] == "critical" for f in cyber),
+    }
+    carbon_result = {
+        "agent": "carbon", "findings": carbon_findings, "narrative": None,
+        "totals": {
+            "total_kwh": round(total_kwh, 1),
+            "total_carbon_kg": round(total_carbon, 1),
+            "intensity_source": source,
+        },
+        "provider": "monitor",
+        "critical_count": sum(f["severity"] == "critical" for f in carbon_findings),
+    }
+    corr = correlate(state, cyber_result, carbon_result)
+    return {"cyber": cyber_result, "carbon": carbon_result, "orchestrator": corr}
 
 
 def run(state, emit=None):

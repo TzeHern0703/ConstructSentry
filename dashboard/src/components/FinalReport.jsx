@@ -1,13 +1,19 @@
-import { ShieldCheck, X } from "lucide-react";
+import { ShieldCheck, ShieldAlert, X } from "lucide-react";
 
-// The HEALED-state report card: slides up after remediation with the savings
-// numbers (FRONTEND_SPEC Section 4, "the three states"). Auto-dismisses with
-// the healed window; also closable.
+// The HEALED-state report card: slides up after remediation. Honors the
+// verification result — a partial heal that leaves the miner running shows as
+// INCOMPLETE (red), not a green success.
 export default function FinalReport({ report, onClose }) {
   if (!report) return null;
+  const ok = report.verified !== false;
+  const color = ok ? "var(--color-healthy)" : "var(--color-critical)";
+  const Icon = ok ? ShieldCheck : ShieldAlert;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center px-6">
-      <div className="report-card pointer-events-auto relative w-full max-w-2xl border-2 border-[var(--color-healthy)] bg-[var(--color-panel)] p-5 shadow-2xl">
+      <div
+        className="report-card pointer-events-auto relative w-full max-w-2xl border-2 bg-[var(--color-panel)] p-5 shadow-2xl"
+        style={{ borderColor: color }}
+      >
         <button
           onClick={onClose}
           className="absolute right-3 top-3 text-[var(--color-slate)] hover:text-[var(--color-ink)]"
@@ -15,10 +21,10 @@ export default function FinalReport({ report, onClose }) {
         >
           <X size={16} />
         </button>
-        <div className="flex items-center gap-2 text-[var(--color-healthy)]">
-          <ShieldCheck size={18} />
-          <span className="meta" style={{ color: "var(--color-healthy)" }}>
-            Threat neutralized
+        <div className="flex items-center gap-2" style={{ color }}>
+          <Icon size={18} />
+          <span className="meta" style={{ color }}>
+            {ok ? "Threat neutralized · verified" : "Remediation incomplete · verify failed"}
           </span>
         </div>
 
@@ -26,10 +32,12 @@ export default function FinalReport({ report, onClose }) {
           <Stat
             value={`$${(report.cost_avoided_usd ?? 0).toLocaleString()}/mo`}
             label="cloud cost reclaimed"
+            color={color}
           />
           <Stat
             value={`${report.carbon_prevented_kg ?? 0} kg`}
             label="CO2e/mo prevented"
+            color={color}
           />
         </div>
 
@@ -41,10 +49,13 @@ export default function FinalReport({ report, onClose }) {
   );
 }
 
-function Stat({ value, label }) {
+function Stat({ value, label, color }) {
   return (
     <div>
-      <div className="font-display text-3xl font-black leading-none text-[var(--color-healthy)]">
+      <div
+        className="font-display text-3xl font-black leading-none"
+        style={{ color }}
+      >
         {value}
       </div>
       <div className="meta mt-1">{label}</div>
