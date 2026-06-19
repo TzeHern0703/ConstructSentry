@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+.env.*
+*.log
+
+# Generated runtime snapshot (recreated from cloud_state.json on first run)
+cloud_state.baseline.json
+
+# Node / Vite
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+Thumbs.db

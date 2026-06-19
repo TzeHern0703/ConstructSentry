@@ -1,0 +1,8 @@
+fastapi>=0.137
+uvicorn>=0.49
+rich>=13
+requests>=2.31
+# Optional LLM providers (the app runs fully offline with deterministic
+# reasoning if neither key is set):
+#   anthropic>=0.40            # set ANTHROPIC_API_KEY
+#   google-generativeai>=0.8   # set GEMINI_API_KEY

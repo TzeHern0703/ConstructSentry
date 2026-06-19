@@ -1,0 +1,303 @@
+{
+  "servers": [
+    {
+      "id": "bim-render-prod-01",
+      "role": "BIM rendering",
+      "region": "ap-southeast-1",
+      "instance_type": "g5.4xlarge",
+      "cpu_utilization": 64,
+      "gpu_utilization": 71,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 1850,
+      "open_ports": [
+        443
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 2,
+      "last_credential_rotation_days": 14,
+      "owner_subcontractor": "Acme HVAC",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "nightly BIM render",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "fieldwire-api-prod",
+      "role": "Fieldwire field-ops API",
+      "region": "us-east-1",
+      "instance_type": "c6i.2xlarge",
+      "cpu_utilization": 47,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 510,
+      "open_ports": [
+        443
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 4,
+      "last_credential_rotation_days": 21,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "field sync batch",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "ontrack-asset-db",
+      "role": "ON!Track asset database",
+      "region": "eu-west-1",
+      "instance_type": "r6i.xlarge",
+      "cpu_utilization": 38,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 430,
+      "open_ports": [
+        443,
+        5432
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 1,
+      "last_credential_rotation_days": 9,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "asset reconciliation",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "nuron-iot-ingestion",
+      "role": "Nuron IoT telemetry ingestion",
+      "region": "eu-north-1",
+      "instance_type": "m6i.xlarge",
+      "cpu_utilization": 55,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 360,
+      "open_ports": [
+        443,
+        8883
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 3,
+      "last_credential_rotation_days": 30,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "tool telemetry stream",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "profis-engineering-calc",
+      "role": "PROFIS engineering calculation",
+      "region": "ca-central-1",
+      "instance_type": "c6i.4xlarge",
+      "cpu_utilization": 42,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 980,
+      "open_ports": [
+        443
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 0,
+      "last_credential_rotation_days": 17,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "anchor design batch calc",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "sap-plm-sync",
+      "role": "SAP PLM synchronization",
+      "region": "eu-west-1",
+      "instance_type": "m6i.2xlarge",
+      "cpu_utilization": 33,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 620,
+      "open_ports": [
+        443
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 2,
+      "last_credential_rotation_days": 44,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "PLM nightly sync",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    },
+    {
+      "id": "bim-archive-render-02",
+      "role": "BIM archive rendering (over-provisioned)",
+      "region": "ap-southeast-3",
+      "instance_type": "g5.12xlarge",
+      "cpu_utilization": 4,
+      "gpu_utilization": 3,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 4100,
+      "open_ports": [
+        443
+      ],
+      "ssh_exposed": false,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 1,
+      "last_credential_rotation_days": 26,
+      "owner_subcontractor": "HILTI Internal",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "occasional archive render",
+          "active": false
+        }
+      ],
+      "status": "warning"
+    },
+    {
+      "id": "blueline-staging-07",
+      "role": "BlueLine Plumbing staging (zombie)",
+      "region": "ap-southeast-3",
+      "instance_type": "m6i.4xlarge",
+      "cpu_utilization": 1,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 1240,
+      "open_ports": [
+        443,
+        22
+      ],
+      "ssh_exposed": true,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 6,
+      "last_credential_rotation_days": 118,
+      "owner_subcontractor": "BlueLine Plumbing",
+      "subcontractor_contract_active": false,
+      "scheduled_tasks": [],
+      "status": "warning"
+    },
+    {
+      "id": "legacy-docs-share-03",
+      "role": "Legacy document share",
+      "region": "us-east-1",
+      "instance_type": "m6i.large",
+      "cpu_utilization": 22,
+      "gpu_utilization": 0,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 180,
+      "open_ports": [
+        443,
+        22,
+        21
+      ],
+      "ssh_exposed": true,
+      "encrypted_at_rest": false,
+      "iam_scope": "wildcard",
+      "mfa_enabled": false,
+      "failed_login_attempts_last_hour": 11,
+      "last_credential_rotation_days": 203,
+      "owner_subcontractor": "Meridian Electrical",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "doc index refresh",
+          "active": true
+        }
+      ],
+      "status": "warning"
+    },
+    {
+      "id": "bim-render-prod-02",
+      "role": "BIM rendering (attack target)",
+      "region": "ap-southeast-1",
+      "instance_type": "g5.4xlarge",
+      "cpu_utilization": 18,
+      "gpu_utilization": 14,
+      "runtime_hours_this_month": 720,
+      "monthly_cost_usd": 1850,
+      "open_ports": [
+        443,
+        22
+      ],
+      "ssh_exposed": true,
+      "encrypted_at_rest": true,
+      "iam_scope": "scoped",
+      "mfa_enabled": true,
+      "failed_login_attempts_last_hour": 3,
+      "last_credential_rotation_days": 19,
+      "owner_subcontractor": "Acme HVAC",
+      "subcontractor_contract_active": true,
+      "scheduled_tasks": [
+        {
+          "task": "nightly BIM render",
+          "active": true
+        }
+      ],
+      "status": "healthy"
+    }
+  ],
+  "project_gantt": {
+    "Acme HVAC": {
+      "contract_end": "2026-09-01",
+      "active": true
+    },
+    "BlueLine Plumbing": {
+      "contract_end": "2026-04-15",
+      "active": false
+    },
+    "Meridian Electrical": {
+      "contract_end": "2026-11-30",
+      "active": true
+    },
+    "HILTI Internal": {
+      "contract_end": "2027-12-31",
+      "active": true
+    }
+  }
+}
