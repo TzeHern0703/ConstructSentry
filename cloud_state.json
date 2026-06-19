@@ -269,8 +269,8 @@
       "encrypted_at_rest": true,
       "iam_scope": "scoped",
       "mfa_enabled": true,
-      "failed_login_attempts_last_hour": 3,
-      "last_credential_rotation_days": 19,
+      "failed_login_attempts_last_hour": 0,
+      "last_credential_rotation_days": 0,
       "owner_subcontractor": "Acme HVAC",
       "subcontractor_contract_active": true,
       "scheduled_tasks": [

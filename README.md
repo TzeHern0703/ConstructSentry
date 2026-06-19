@@ -114,16 +114,20 @@ server proxies `/api` to the backend on `:8000`.
 
 ## Configuration (optional)
 
-Set environment variables to enable live data/reasoning (all optional):
+Copy `.env.example` to `.env` and fill in any keys (all optional — the app
+auto-loads `.env` on startup):
 
 ```bash
-export ELECTRICITY_MAPS_API_KEY=...   # live grid carbon intensity
-export ANTHROPIC_API_KEY=...          # Claude reasoning (else Gemini, else offline)
-export GEMINI_API_KEY=...             # Gemini reasoning
+cp .env.example .env
+# then edit .env:
+ELECTRICITY_MAPS_API_KEY=...   # live grid carbon intensity
+ANTHROPIC_API_KEY=...          # Claude reasoning (else Gemini, else offline)
+GEMINI_API_KEY=...             # Gemini reasoning
 ```
 
 With no keys set, the app uses the fallback carbon table and deterministic
-agent reasoning — clearly labeled as such in the UI.
+agent reasoning — clearly labeled as such in the UI. `.env` is gitignored, so
+your keys never get committed.
 
 ---
 

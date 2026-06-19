@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+import _env  # noqa: F401  (loads .env into os.environ on import)
+
 try:  # requests is optional — fallback works without any network stack
     import requests
 except ImportError:  # pragma: no cover

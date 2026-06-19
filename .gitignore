@@ -6,6 +6,7 @@ venv/
 env/
 .env
 .env.*
+!.env.example
 *.log
 
 # Generated runtime snapshot (recreated from cloud_state.json on first run)
