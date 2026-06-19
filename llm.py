@@ -21,7 +21,7 @@ import _env  # noqa: F401  (loads .env into os.environ on import)
 
 # A cheap, fast model for routine ReAct steps (PROJECT_SPEC Section 8).
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 
 
 @dataclass
