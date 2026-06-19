@@ -17,6 +17,7 @@ tools.py (not hardcoded), so the dashboard's carbon chart spikes on its own.
 from __future__ import annotations
 
 import tools
+import state_store
 from state_store import TARGET_ID, ensure_baseline, get_server, load_state, save_state
 
 AGENT = "attack_simulator"
@@ -32,27 +33,29 @@ def simulate_attack(emit=None, target_id=TARGET_ID):
     # Capture the pristine baseline BEFORE we mutate, so remediation can restore.
     ensure_baseline()
 
-    state = load_state()
-    srv = get_server(state, target_id)
-    if srv is None:
-        raise ValueError(f"target server '{target_id}' not found")
+    # Atomic read-modify-write so a concurrent monitor sweep can't interleave.
+    with state_store.transaction():
+        state = load_state()
+        srv = get_server(state, target_id)
+        if srv is None:
+            raise ValueError(f"target server '{target_id}' not found")
 
-    before = tools.compute_server_carbon(srv)
-    _emit(emit, "reason",
-          f"Injecting attack signature into {target_id} (LOCAL simulation — no "
-          f"real network traffic).", "critical")
+        before = tools.compute_server_carbon(srv)
+        _emit(emit, "reason",
+              f"Injecting attack signature into {target_id} (LOCAL simulation — "
+              f"no real network traffic).", "critical")
 
-    srv["failed_login_attempts_last_hour"] = 450
-    srv["cpu_utilization"] = 95
-    srv["gpu_utilization"] = 98
-    srv["scheduled_tasks"] = []
-    srv["status"] = "critical"
-    if 22 not in srv.get("open_ports", []):
-        srv["open_ports"].append(22)
-    srv["ssh_exposed"] = True
+        srv["failed_login_attempts_last_hour"] = 450
+        srv["cpu_utilization"] = 95
+        srv["gpu_utilization"] = 98
+        srv["scheduled_tasks"] = []
+        srv["status"] = "critical"
+        if 22 not in srv.get("open_ports", []):
+            srv["open_ports"].append(22)
+        srv["ssh_exposed"] = True
 
-    save_state(state)
-    after = tools.compute_server_carbon(srv)
+        save_state(state)
+        after = tools.compute_server_carbon(srv)
 
     spike_pct = round(
         (after["carbon_kg"] - before["carbon_kg"]) / max(before["carbon_kg"], 0.1) * 100

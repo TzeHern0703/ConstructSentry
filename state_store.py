@@ -13,8 +13,23 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Serializes read-modify-write across the concurrent callers (the 6s monitor
+# loop + scan/attack/remediate, all running in the thread pool). Reentrant so a
+# transaction can call save_state without deadlocking.
+_LOCK = threading.RLock()
+
+
+def transaction():
+    """Context manager for an atomic read-modify-write:
+
+        with state_store.transaction():
+            s = load_state(); ...mutate...; save_state(s)
+    """
+    return _LOCK
 STATE_PATH = os.path.join(BASE_DIR, "cloud_state.json")
 BASELINE_PATH = os.path.join(BASE_DIR, "cloud_state.baseline.json")
 
@@ -23,14 +38,22 @@ TARGET_ID = "bim-render-prod-02"
 
 
 def load_state(path=STATE_PATH):
-    with open(path, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+    # Reads are quick and atomic writes (below) guarantee a complete file, but
+    # take the lock anyway to avoid racing a write mid-swap on some platforms.
+    with _LOCK:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
 
 
 def save_state(state, path=STATE_PATH):
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, indent=2)
-        fh.write("\n")
+    """Atomically persist state: write a temp file then os.replace (atomic on
+    the same filesystem), so a concurrent reader never sees a half-written file."""
+    with _LOCK:
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, indent=2)
+            fh.write("\n")
+        os.replace(tmp, path)
 
 
 def ensure_baseline():

@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover
 # --- Configuration ---------------------------------------------------------
 
 ELECTRICITY_MAPS_URL = "https://api.electricitymap.org/v3/carbon-intensity/latest"
+ELECTRICITY_MAPS_HISTORY_URL = "https://api.electricitymap.org/v3/carbon-intensity/history"
 
 # Read the API key from the environment so we never hardcode secrets.
 API_KEY = os.environ.get("ELECTRICITY_MAPS_API_KEY", "").strip()
@@ -182,6 +183,52 @@ def greenest_region() -> tuple[str, float]:
 def clear_cache() -> None:
     """Reset the in-process cache (useful for tests / re-scans)."""
     _cache.clear()
+    _shift_cache.clear()
+
+
+# Fallback intraday swing when the history API isn't available — clearly labeled.
+DEFAULT_SHIFT_FRACTION = 0.15
+
+_shift_cache: dict[str, tuple[float, str]] = {}
+
+
+def get_intraday_shift(region: str, use_cache: bool = True) -> tuple[float, str]:
+    """Achievable carbon saving from time-shifting a deferrable job to the
+    greenest hour IN-REGION, derived from the real last-24h grid curve:
+
+        fraction = (current_intensity - min_24h) / current_intensity
+
+    Returns (fraction, source) where source is "live" | "fallback". This
+    replaces the old hardcoded 20% with data — the swing differs a lot by grid
+    (hydro-heavy Canada is flat; coal/solar mixes swing hard).
+    """
+    if use_cache and region in _shift_cache:
+        return _shift_cache[region]
+
+    result = (DEFAULT_SHIFT_FRACTION, "fallback")
+    zone = REGION_TO_ZONE.get(region)
+    if API_KEY and requests is not None and zone:
+        try:
+            resp = requests.get(
+                ELECTRICITY_MAPS_HISTORY_URL,
+                params={"zone": zone},
+                headers={"auth-token": API_KEY},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            resp.raise_for_status()
+            history = resp.json().get("history", [])
+            values = [h["carbonIntensity"] for h in history
+                      if h.get("carbonIntensity") is not None]
+            if len(values) >= 2:
+                current, low = values[-1], min(values)
+                frac = max(0.0, (current - low) / current) if current else 0.0
+                result = (round(frac, 3), "live")
+        except Exception:
+            pass
+
+    if use_cache:
+        _shift_cache[region] = result
+    return result
 
 
 if __name__ == "__main__":

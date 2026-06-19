@@ -306,6 +306,15 @@ def _build_report(incidents):
 SECURITY_PENALTY = {"critical": 15, "warning": 2, "info": 1}
 COMPROMISE_PENALTY = 25
 
+# Findings are weighted by the asset's business criticality — a problem on a
+# core BIM server matters far more than the same problem on disposable staging.
+ASSET_WEIGHT = {"critical": 2.0, "high": 1.5, "medium": 1.0, "low": 0.5}
+
+# A compromised CRITICAL asset is a single point of catastrophic risk: cap the
+# whole score low regardless of how healthy the rest of the fleet looks, so a
+# big fleet can't dilute one core breach into a falsely "passing" score.
+COMPROMISED_CRITICAL_CEILING = 30
+
 
 def summarize(state, results):
     """Build the headline numbers for the summary row / /api/summary.
@@ -315,10 +324,23 @@ def summarize(state, results):
     """
     cyber = results["cyber"]["findings"]
     report = results["orchestrator"]["report"]
-    penalty = sum(SECURITY_PENALTY.get(f["severity"], 0) for f in cyber)
-    if report["system_status"] == "CRITICAL":
+    incidents = results["orchestrator"]["incidents"]
+    crit_of = {s["id"]: s.get("asset_criticality", "medium") for s in state["servers"]}
+
+    # Asset-weighted penalty: weight each finding by its server's criticality.
+    penalty = sum(
+        SECURITY_PENALTY.get(f["severity"], 0)
+        * ASSET_WEIGHT.get(crit_of.get(f["server_id"], "medium"), 1.0)
+        for f in cyber
+    )
+    compromised = [i for i in incidents if i["category"] == "compromised_host"]
+    if compromised:
         penalty += COMPROMISE_PENALTY
-    security_score = max(0, 100 - penalty)
+    security_score = max(0, round(100 - penalty))
+
+    # Single-point-fatal: any compromised CRITICAL asset hard-caps the score.
+    if any(crit_of.get(i["server_id"]) == "critical" for i in compromised):
+        security_score = min(security_score, COMPROMISED_CRITICAL_CEILING)
 
     total_cost = sum(s.get("monthly_cost_usd", 0) for s in state["servers"])
 

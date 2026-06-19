@@ -28,7 +28,8 @@
       ],
       "status": "healthy",
       "data_residency": "APAC",
-      "dataset_size_gb": 800
+      "dataset_size_gb": 800,
+      "asset_criticality": "critical"
     },
     {
       "id": "fieldwire-api-prod",
@@ -58,7 +59,8 @@
       ],
       "status": "healthy",
       "data_residency": "none",
-      "dataset_size_gb": 120
+      "dataset_size_gb": 120,
+      "asset_criticality": "high"
     },
     {
       "id": "ontrack-asset-db",
@@ -89,7 +91,8 @@
       ],
       "status": "healthy",
       "data_residency": "EU",
-      "dataset_size_gb": 400
+      "dataset_size_gb": 400,
+      "asset_criticality": "high"
     },
     {
       "id": "nuron-iot-ingestion",
@@ -120,7 +123,8 @@
       ],
       "status": "healthy",
       "data_residency": "none",
-      "dataset_size_gb": 200
+      "dataset_size_gb": 200,
+      "asset_criticality": "medium"
     },
     {
       "id": "profis-engineering-calc",
@@ -150,7 +154,8 @@
       ],
       "status": "healthy",
       "data_residency": "none",
-      "dataset_size_gb": 50
+      "dataset_size_gb": 50,
+      "asset_criticality": "high"
     },
     {
       "id": "sap-plm-sync",
@@ -180,7 +185,8 @@
       ],
       "status": "healthy",
       "data_residency": "EU",
-      "dataset_size_gb": 300
+      "dataset_size_gb": 300,
+      "asset_criticality": "high"
     },
     {
       "id": "bim-archive-render-02",
@@ -210,7 +216,8 @@
       ],
       "status": "warning",
       "data_residency": "APAC",
-      "dataset_size_gb": 2000
+      "dataset_size_gb": 2000,
+      "asset_criticality": "medium"
     },
     {
       "id": "blueline-staging-07",
@@ -236,7 +243,8 @@
       "scheduled_tasks": [],
       "status": "warning",
       "data_residency": "none",
-      "dataset_size_gb": 100
+      "dataset_size_gb": 100,
+      "asset_criticality": "low"
     },
     {
       "id": "legacy-docs-share-03",
@@ -268,7 +276,8 @@
       ],
       "status": "warning",
       "data_residency": "none",
-      "dataset_size_gb": 60
+      "dataset_size_gb": 60,
+      "asset_criticality": "low"
     },
     {
       "id": "bim-render-prod-02",
@@ -299,7 +308,8 @@
       ],
       "status": "healthy",
       "data_residency": "APAC",
-      "dataset_size_gb": 600
+      "dataset_size_gb": 600,
+      "asset_criticality": "critical"
     }
   ],
   "project_gantt": {

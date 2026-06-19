@@ -20,7 +20,10 @@ verification fails and the system says so.
 
 from __future__ import annotations
 
+import random
+
 import tools
+import state_store
 from state_store import TARGET_ID, get_server, load_baseline, load_state, save_state
 
 AGENT = "remediation"
@@ -33,17 +36,31 @@ def _emit(emit, phase, text, severity="info"):
         emit({"agent": AGENT, "phase": phase, "text": text, "severity": severity})
 
 
+def _legit_utilization(nominal):
+    """A plausible *current* utilization for the restored legitimate workload.
+
+    After the miner is killed, utilization is whatever the real workload happens
+    to be drawing now — not a perfect replay of a historical snapshot. We center
+    on the workload's nominal level and add live jitter so the recovered state
+    is realistic rather than 'frozen-in-time'.
+    """
+    if not nominal:
+        return nominal
+    return max(0, round(nominal * random.uniform(0.8, 1.2)))
+
+
 def _apply_step(step, srv, baseline_srv):
     """Apply one response action by restoring the fields it governs."""
     if step == "isolate":
         srv["ssh_exposed"] = baseline_srv["ssh_exposed"]
         srv["open_ports"] = list(baseline_srv["open_ports"])
     elif step == "kill_process":
-        # Killing the mining daemon is what actually frees the compute and
-        # restores the legitimate workload.
-        srv["cpu_utilization"] = baseline_srv["cpu_utilization"]
-        srv["gpu_utilization"] = baseline_srv["gpu_utilization"]
+        # Killing the mining daemon frees the compute; the server then settles
+        # back into its LEGITIMATE workload's operating range (config restored,
+        # utilization a live value near nominal — not a static snapshot replay).
         srv["scheduled_tasks"] = baseline_srv["scheduled_tasks"]
+        srv["cpu_utilization"] = _legit_utilization(baseline_srv["cpu_utilization"])
+        srv["gpu_utilization"] = _legit_utilization(baseline_srv["gpu_utilization"])
         srv["status"] = baseline_srv["status"]
     elif step == "rotate_credentials":
         srv["failed_login_attempts_last_hour"] = 0
@@ -57,31 +74,34 @@ def remediate(emit=None, target_id=TARGET_ID, steps=None):
     any residual critical findings.
     """
     steps = steps or ALL_STEPS
-    state = load_state()
-    srv = get_server(state, target_id)
-    if srv is None:
-        raise ValueError(f"target server '{target_id}' not found")
+    # Atomic read-modify-write+verify so a concurrent monitor sweep can't
+    # interleave between the fix and the verification.
+    with state_store.transaction():
+        state = load_state()
+        srv = get_server(state, target_id)
+        if srv is None:
+            raise ValueError(f"target server '{target_id}' not found")
 
-    before = tools.compute_server_carbon(srv)
-    cost = srv.get("monthly_cost_usd", 0)
-    baseline = load_baseline()
-    bsrv = get_server(baseline, target_id)
+        before = tools.compute_server_carbon(srv)
+        cost = srv.get("monthly_cost_usd", 0)
+        baseline = load_baseline()
+        bsrv = get_server(baseline, target_id)
 
-    _emit(emit, "reason",
-          f"Heal protocol on {target_id}: running {', '.join(steps)}.", "info")
-    for step in steps:
-        _emit(emit, "act", f"{step.replace('_', ' ')} on {target_id}.")
-        _apply_step(step, srv, bsrv)
+        _emit(emit, "reason",
+              f"Heal protocol on {target_id}: running {', '.join(steps)}.", "info")
+        for step in steps:
+            _emit(emit, "act", f"{step.replace('_', ' ')} on {target_id}.")
+            _apply_step(step, srv, bsrv)
 
-    save_state(state)
-    after = tools.compute_server_carbon(srv)
+        save_state(state)
+        after = tools.compute_server_carbon(srv)
 
-    # VERIFY — re-scan the target instead of asserting success.
-    _emit(emit, "act", f"Re-scanning {target_id} to verify remediation.")
-    residual = (
-        tools.run_cyber_checks(srv, state.get("project_gantt", {}))
-        + tools.run_carbon_checks(srv)
-    )
+        # VERIFY — re-scan the target instead of asserting success.
+        _emit(emit, "act", f"Re-scanning {target_id} to verify remediation.")
+        residual = (
+            tools.run_cyber_checks(srv, state.get("project_gantt", {}))
+            + tools.run_carbon_checks(srv)
+        )
     residual_critical = [f for f in residual if f["severity"] == "critical"]
     verified = not residual_critical
 

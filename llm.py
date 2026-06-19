@@ -103,6 +103,8 @@ def _call_anthropic(messages, tools, system, model, max_tokens) -> LLMResponse:
 # --- Gemini ----------------------------------------------------------------
 
 def _call_gemini(messages, tools, system, model, max_tokens) -> LLMResponse:
+    import warnings
+    warnings.filterwarnings("ignore", category=FutureWarning, module="google.*")
     import google.generativeai as genai
 
     genai.configure(

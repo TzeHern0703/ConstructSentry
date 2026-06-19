@@ -23,7 +23,12 @@ Every detection function returns either None (no problem) or a finding dict:
 
 from __future__ import annotations
 
-from carbon_data import get_carbon_intensity, get_pue, greenest_region
+from carbon_data import (
+    get_carbon_intensity,
+    get_intraday_shift,
+    get_pue,
+    greenest_region,
+)
 
 # --- Severity ordering (used by the orchestrator to rank) ------------------
 
@@ -201,12 +206,6 @@ DEFERRABLE_KEYWORDS = ("render", "archive", "calc", "sync", "batch", "reconcil")
 # figure for wide-area transfer.
 NETWORK_KWH_PER_GB = 0.06
 
-# A deferrable job time-shifted to the grid's greenest hours (in-region, no data
-# movement) can avoid roughly this fraction of its carbon — a conservative take
-# on intraday grid-intensity swings.
-TIME_SHIFT_SAVING_FRACTION = 0.20
-
-
 def is_relocatable(server):
     """True only if the data has no residency lock (can legally move regions)."""
     return server.get("data_residency", "none") in (None, "none", "")
@@ -231,7 +230,10 @@ def _greening_plan(server, carbon, intensity):
     gross_savings = round(carbon["carbon_kg"] - greener_kg, 1)
     dataset_gb = server.get("dataset_size_gb", 0)
     transit_kg = round(transit_carbon_kg(dataset_gb, intensity.gco2_per_kwh), 1)
-    shift_kg = round(carbon["carbon_kg"] * TIME_SHIFT_SAVING_FRACTION, 1)
+    # Time-shift saving is derived from the region's real last-24h grid swing,
+    # not a hardcoded fraction.
+    shift_frac, shift_src = get_intraday_shift(server["region"])
+    shift_kg = round(carbon["carbon_kg"] * shift_frac, 1)
 
     # 1) Data sovereignty: residency-locked data must not move cross-border.
     if not is_relocatable(server):
@@ -251,6 +253,8 @@ def _greening_plan(server, carbon, intensity):
             "gross_relocate_kg": gross_savings,
             "transit_kg": transit_kg,
             "savings_kg": shift_kg,
+            "shift_pct": round(shift_frac * 100),
+            "shift_source": shift_src,
         }
 
     # 2) Relocatable, but only if it net-saves after transit carbon.
@@ -269,6 +273,8 @@ def _greening_plan(server, carbon, intensity):
             "gross_relocate_kg": gross_savings,
             "transit_kg": transit_kg,
             "savings_kg": shift_kg,
+            "shift_pct": round(shift_frac * 100),
+            "shift_source": shift_src,
         }
 
     action = (
