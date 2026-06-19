@@ -16,6 +16,7 @@ import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
 import IncidentList from "./components/IncidentList";
 import FinalReport from "./components/FinalReport";
+import AiSummary from "./components/AiSummary";
 
 const MAX_POINTS = 45;
 const HEALED_WINDOW_MS = 8000;
@@ -148,6 +149,11 @@ export default function App() {
           <SummaryRow summary={summary} />
           <ServerGrid servers={state?.servers} />
           <CarbonChart data={carbonHistory} status={status} />
+          <AiSummary
+            cyber={findings?.cyber_narrative}
+            carbon={findings?.carbon_narrative}
+            provider={findings?.provider}
+          />
         </section>
 
         {/* RIGHT 40% */}

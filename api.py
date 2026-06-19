@@ -75,13 +75,22 @@ def _make_emit(loop: asyncio.AbstractEventLoop):
 
 _LAST: dict | None = None
 
+# Agent narratives persist across the cheap monitor sweeps (which have none), so
+# the AI-summary panel keeps showing the last real LLM analysis.
+_NARRATIVE: dict = {"cyber": None, "carbon": None, "provider": "offline"}
+
 
 def _refresh(state=None, emit=None) -> dict:
-    global _LAST
+    global _LAST, _NARRATIVE
     state = state or state_store.load_state()
     results = orchestrator.run(state, emit=emit)
     summary = orchestrator.summarize(state, results)
     _LAST = {"results": results, "summary": summary, "ts": time.time()}
+    _NARRATIVE = {
+        "cyber": results["cyber"]["narrative"],
+        "carbon": results["carbon"]["narrative"],
+        "provider": results["cyber"].get("provider"),
+    }
     return _LAST
 
 
@@ -157,8 +166,9 @@ def _findings_payload(last: dict) -> dict:
         "carbon": results["carbon"]["findings"],
         "incidents": corr["incidents"],
         "report": corr["report"],
-        "cyber_narrative": results["cyber"]["narrative"],
-        "carbon_narrative": results["carbon"]["narrative"],
+        "cyber_narrative": _NARRATIVE["cyber"],
+        "carbon_narrative": _NARRATIVE["carbon"],
+        "provider": _NARRATIVE["provider"],
     }
 
 
