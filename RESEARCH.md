@@ -189,17 +189,25 @@ The agent keeps the **fewest replicas that meet the SLO**:
 - `target = ceil(latency × replicas / slo)`; latency scales inversely with
   replicas. See it in the **Scaling** tab (latency-vs-SLO bars).
 
-**Two operating modes:**
-- **Manual / human-in-the-loop** — click **Heal** and the agent lists the
-  discovered problems + proposed steps and asks you to **Approve** before acting.
-  Scale/Terminate/Hibernate have one-click **Apply** on the incident card.
-- **Autopilot** (control-bar toggle) — the agent acts autonomously every sweep:
-  scales to the SLO *and* auto-heals a compromised host (isolate→kill→rotate→
-  verify), streaming `🤖 Autopilot …` to the feed. A live traffic wave makes
-  latency fluctuate so there's always something to track.
+**Graduated autonomy:**
+- **Autopilot** (control-bar toggle) — the agent autonomously does the *safe*
+  work each sweep: scaling each workload to its SLO (predictive — it pre-scales
+  on a short load forecast). A live traffic wave keeps latency moving.
+- **High-stakes = approval required** — healing a compromised host is gated:
+  even in Autopilot the agent raises an **approval request** (banner with
+  Approve / Deny); with Autopilot off, clicking **Heal** opens the same plan
+  (problems found + proposed steps) to approve. Safe = auto, risky = your call.
+- Terminate / Hibernate have one-click **Apply** on the incident card; Scale
+  ↑/↓ has **Apply** in the Scaling tab.
+
+The **Efficiency tab** ranks workloads by emissions and flags each as
+carbon-intensive / inefficient / efficient with the *why* (oversized instance,
+dirty grid, replicas, near-idle, cooling) + utilization + carbon wasted on idle.
 
 ```bash
-curl -s -X POST "http://localhost:5173/api/autopilot?on=true"     # enable autonomy
+curl -s -X POST "http://localhost:5173/api/autopilot?on=true"      # enable autonomy
+curl -s    "http://localhost:5173/api/carbon"                       # per-workload efficiency
+curl -s -X POST "http://localhost:5173/api/approve?server_id=bim-render-prod-02"  # approve a gated heal
 curl -s -X POST "http://localhost:5173/api/action?server_id=fieldwire-api-prod&type=scale_down"
 ```
 
@@ -255,11 +263,11 @@ Edit `cloud_state.json`, save, wait ~6 s, observe. (Server names are the `id`.)
    spend $4,110→$2,870; reset and instead **Hibernate** `bim-archive-render-02`
    to watch total carbon fall ~1790→~1090 kg (it's the biggest emitter).
 
-8. **Autopilot autonomy (agent acts on its own)**
-   Toggle **Autopilot ON**, then **Simulate Attack** and don't touch anything:
-   within a couple of sweeps the agent auto-scales workloads to their SLO *and*
-   auto-heals the compromised host (watch the `🤖 Autopilot …` feed + the
-   "what was solved" card). Turn it off to return to approve-before-heal.
+8. **Autopilot autonomy + approval gate**
+   Toggle **Autopilot ON**: the agent auto-scales workloads to their SLO on its
+   own (watch the `🤖 Autopilot …` feed). Now **Simulate Attack** — instead of
+   silently healing, the agent raises an **approval request** banner; click
+   **Approve** to run the verified heal (safe actions auto, risky gated).
 
 9. **Latency / scaling (raise load by hand)**
    Bump `latency_p95_ms` on `fieldwire-api-prod` above its `latency_slo_ms`

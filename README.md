@@ -119,13 +119,23 @@ Things that are easy to get wrong in a PoC and how this project handles them:
   carbon+cost waste (scale down), a latency breach needs capacity (scale up). So
   carbon is minimized *subject to* the performance SLO — the integration most
   PoCs miss.
-- **Autonomous agent (Autopilot) vs human-in-the-loop.** A live traffic wave
-  makes latency fluctuate; with **Autopilot ON** the agent acts on its own each
-  sweep — scaling to the SLO *and* auto-healing a compromised host (isolate →
-  kill → rotate → verify), streaming "🤖 Autopilot …" to the feed, no clicks.
-  With Autopilot OFF, **Heal is human-in-the-loop**: the agent lists the problems
-  it found and the remediation it proposes, and asks the operator to **approve**
-  before executing — like a real SOC runbook, not a silent auto-fix.
+- **Graduated autonomy (safe = auto, risky = approval).** A live traffic wave
+  makes latency fluctuate; with **Autopilot ON** the agent autonomously does the
+  *safe, reversible* work — scaling each workload to its SLO. But a *high-stakes*
+  action (healing a compromised prod host = killing processes) is **gated behind
+  human approval even in Autopilot**: the agent lists the problems it found and
+  the remediation it proposes and waits for the operator to **Approve / Deny** —
+  like a real SOC runbook, not a silent auto-fix.
+- **Predictive autoscaling (not just reactive).** A short-horizon load forecast
+  lets the agent **pre-scale before** latency breaches the SLO, rather than only
+  reacting after.
+- **Identifies carbon-intensive / inefficient workloads with the "why".** The
+  Efficiency view ranks workloads by emissions and explains each (oversized
+  instance / dirty grid / replicas / near-idle / cooling), with utilization and
+  the carbon wasted on idle capacity — answering the challenge directly.
+- **Business framing.** The AI Report includes a business view: annualized $ and
+  CO₂e (in relatable terms), and why it matters in construction terms (blueprint
+  IP, subcontractor governance, project margin, ESG reporting).
 - **Per-workload lifecycle actions (not one-size-fits-all "shut down").** The
   orchestrator recommends the *right* action per server — **terminate** (gone
   for good), **hibernate** (stop compute, keep disk, wake on demand),
@@ -206,14 +216,16 @@ server proxies `/api` to the backend on `:8000`.
    and a verified savings report slides in.
 
 Or flip **Autopilot ON** and just watch: the agent autonomously scales workloads
-to their SLO and auto-heals the attack — no clicks. With Autopilot off, **Heal**
-opens an approval plan (discovered problems + proposed steps) you confirm first.
+to their SLO, and on an attack it **requests approval** to heal (a banner with
+Approve / Deny) — safe actions auto, risky actions gated.
 
 Throughout, the **Agent Reasoning** feed streams live Reason→Act→Observe steps
 (including the monitor's heartbeat and 🤖 Autopilot actions). The left panel
-toggles **Fleet / Carbon Map / Scaling** (latency-vs-SLO benchmark); on an
-incident, switch **Terminate ↔ Hibernate** or **Scale ↓/↑** and hit **Apply**;
-and **AI Report** exports the full LLM analysis as Markdown.
+toggles **Fleet / Efficiency / Carbon Map / Scaling**: Efficiency flags
+carbon-intensive/inefficient workloads with the why; Carbon Map shows live grid
++ 24h forecast; Scaling is the latency-vs-SLO benchmark with Apply. On an
+incident, switch **Terminate ↔ Hibernate** and hit **Apply**; **AI Report**
+exports the full analysis (with business impact) as Markdown.
 
 ---
 
