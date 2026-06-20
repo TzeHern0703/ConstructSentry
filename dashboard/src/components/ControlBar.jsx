@@ -1,10 +1,10 @@
-import { Activity, AlertTriangle, ShieldCheck, RotateCcw } from "lucide-react";
+import { Activity, AlertTriangle, ShieldCheck, RotateCcw, FileText } from "lucide-react";
 
 // Three buttons drive the live demo (FRONTEND_SPEC component 7): Run Scan,
 // Simulate Attack, Heal. Rectangular, thin border, uppercase mono labels —
 // no rounded pills (Section 4 motion/typography). Reset is a small secondary
 // control for re-running the demo.
-export default function ControlBar({ onScan, onAttack, onHeal, onReset, busy, status }) {
+export default function ControlBar({ onScan, onAttack, onHeal, onReset, onReport, busy, status }) {
   const critical = status === "CRITICAL";
   return (
     <div className="flex items-stretch gap-3 border border-white/10 bg-[var(--color-panel)] p-3">
@@ -30,6 +30,14 @@ export default function ControlBar({ onScan, onAttack, onHeal, onReset, busy, st
         accent="var(--color-healthy)"
       />
       <div className="flex-1" />
+      <Button
+        label="AI Report"
+        icon={FileText}
+        onClick={onReport}
+        disabled={false}
+        accent="#C77DFF"
+        small
+      />
       <Button
         label="Reset"
         icon={RotateCcw}

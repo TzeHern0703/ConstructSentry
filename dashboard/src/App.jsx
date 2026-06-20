@@ -16,7 +16,7 @@ import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
 import IncidentList from "./components/IncidentList";
 import FinalReport from "./components/FinalReport";
-import AiSummary from "./components/AiSummary";
+import ReportModal from "./components/ReportModal";
 
 const MAX_POINTS = 45;
 const HEALED_WINDOW_MS = 8000;
@@ -30,6 +30,7 @@ export default function App() {
   const [error, setError] = useState(null);
   // HEALED is a transient frontend-only state shown right after remediation.
   const [healReport, setHealReport] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Poll summary + state every 2s (FRONTEND_SPEC Section 3).
   useEffect(() => {
@@ -142,6 +143,12 @@ export default function App() {
       )}
 
       <FinalReport report={healReport} onClose={() => setHealReport(null)} />
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        summary={summary}
+        findings={findings}
+      />
 
       <main className="grid flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-5">
         {/* LEFT 60% */}
@@ -149,11 +156,6 @@ export default function App() {
           <SummaryRow summary={summary} />
           <ServerGrid servers={state?.servers} />
           <CarbonChart data={carbonHistory} status={status} />
-          <AiSummary
-            cyber={findings?.cyber_narrative}
-            carbon={findings?.carbon_narrative}
-            provider={findings?.provider}
-          />
         </section>
 
         {/* RIGHT 40% */}
@@ -169,6 +171,7 @@ export default function App() {
           onAttack={onAttack}
           onHeal={onHeal}
           onReset={onReset}
+          onReport={() => setReportOpen(true)}
           busy={busy}
           status={status}
         />
