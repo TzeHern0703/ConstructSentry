@@ -21,6 +21,7 @@ import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
 import IncidentList from "./components/IncidentList";
 import RemediationModal from "./components/RemediationModal";
+import HealPlanModal from "./components/HealPlanModal";
 import ReportModal from "./components/ReportModal";
 
 const MAX_POINTS = 45;
@@ -35,6 +36,7 @@ export default function App() {
   const [error, setError] = useState(null);
   // HEALED is a transient frontend-only state shown right after remediation.
   const [healReport, setHealReport] = useState(null);
+  const [healPlanOpen, setHealPlanOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [view, setView] = useState("fleet"); // "fleet" | "map"
 
@@ -135,14 +137,18 @@ export default function App() {
     await runReset();
   });
 
-  // Heal is special: it triggers the transient HEALED state + report card.
-  async function onHeal() {
+  // Manual Heal is human-in-the-loop: open the plan for review/approval first.
+  const onHeal = () => setHealPlanOpen(true);
+
+  // Approve → actually execute the remediation, then show the result card.
+  async function approveHeal() {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
       const resp = await runRemediate();
       await refresh();
+      setHealPlanOpen(false);
       setHealReport(resp.report);
       setTimeout(() => setHealReport(null), HEALED_WINDOW_MS);
     } catch (e) {
@@ -170,6 +176,14 @@ export default function App() {
         </p>
       )}
 
+      {healPlanOpen && (
+        <HealPlanModal
+          incidents={findings?.incidents}
+          onApprove={approveHeal}
+          onCancel={() => setHealPlanOpen(false)}
+          busy={busy}
+        />
+      )}
       <RemediationModal report={healReport} onClose={() => setHealReport(null)} />
       <ReportModal
         open={reportOpen}
