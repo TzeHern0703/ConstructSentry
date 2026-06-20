@@ -336,6 +336,19 @@ def get_regions():
     return {"regions": ordered, "greenest": greenest}
 
 
+@app.get("/api/carbon")
+def get_carbon():
+    """Per-workload carbon breakdown — WHY each is carbon-intensive/inefficient,
+    ranked by emissions. Directly answers 'identify carbon-intensive or
+    inefficient workloads'."""
+    state = state_store.load_state()
+    rows = [tools.carbon_breakdown(s) for s in state["servers"]]
+    rows.sort(key=lambda r: r["carbon_kg"], reverse=True)
+    total = round(sum(r["carbon_kg"] for r in rows), 1)
+    wasted = round(sum(r["wasted_kg"] for r in rows), 1)
+    return {"workloads": rows, "total_carbon_kg": total, "total_wasted_kg": wasted}
+
+
 @app.get("/api/forecast")
 def get_forecast():
     """Next-24h carbon forecast per region + the greenest upcoming window —

@@ -18,6 +18,7 @@ export const getState = () => jget("/api/state");
 export const getFindings = () => jget("/api/findings");
 export const getRegions = () => jget("/api/regions");
 export const getForecast = () => jget("/api/forecast");
+export const getCarbon = () => jget("/api/carbon");
 
 export const runScan = () => jpost("/api/scan");
 export const runAttack = () => jpost("/api/attack");

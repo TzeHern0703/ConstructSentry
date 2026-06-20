@@ -371,6 +371,47 @@ def compute_server_carbon(server):
     }
 
 
+def carbon_breakdown(server):
+    """Explain WHY a workload is carbon-intensive / inefficient: the drivers
+    (instance size, utilization, grid, PUE, replicas) + an efficiency read.
+
+    Inefficient = paying carbon for idle capacity (low utilization). Wasted
+    carbon = the share of emissions attributable to that idle headroom.
+    """
+    c = compute_server_carbon(server)
+    if server.get("status") == "hibernated":
+        return {**c, "max_watts": 0, "cpu": 0, "gpu": 0, "util_pct": 0,
+                "wasted_kg": 0.0, "inefficient": False, "intensive": False,
+                "drivers": ["hibernated"]}
+
+    max_watts = INSTANCE_MAX_WATTS.get(server.get("instance_type"), DEFAULT_MAX_WATTS)
+    cpu = server.get("cpu_utilization", 0)
+    gpu = server.get("gpu_utilization", 0)
+    util_pct = round(_utilization_fraction(server) * 100)
+    idle_frac = max(0.0, 1 - util_pct / 100)
+    wasted_kg = round(c["carbon_kg"] * idle_frac, 1)
+
+    drivers = []
+    if max_watts >= LARGE_INSTANCE_WATTS:
+        drivers.append("oversized instance")
+    if c["intensity_gco2_kwh"] >= 400:
+        drivers.append("dirty grid")
+    if c["replicas"] > 1:
+        drivers.append(f"{c['replicas']} replicas")
+    if util_pct < 15:
+        drivers.append("near-idle capacity")
+    if c["pue"] >= 1.4:
+        drivers.append("hot-region cooling")
+
+    inefficient = util_pct < 15 and c["carbon_kg"] > 15
+    intensive = c["carbon_kg"] >= 150
+    return {
+        **c, "max_watts": max_watts, "cpu": cpu, "gpu": gpu,
+        "util_pct": util_pct, "wasted_kg": wasted_kg,
+        "inefficient": inefficient, "intensive": intensive, "drivers": drivers,
+    }
+
+
 def is_deferrable(server):
     """True if the workload looks batch/deferrable (movable to a greener grid)."""
     role = server.get("role", "").lower()

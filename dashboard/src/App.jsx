@@ -18,6 +18,7 @@ import SummaryRow from "./components/SummaryRow";
 import ServerGrid from "./components/ServerGrid";
 import RoutingMap from "./components/RoutingMap";
 import ScalingBench from "./components/ScalingBench";
+import CarbonBreakdown from "./components/CarbonBreakdown";
 import CarbonChart from "./components/CarbonChart";
 import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
@@ -246,7 +247,7 @@ export default function App() {
           <SummaryRow summary={summary} />
           <div>
             <div className="mb-2 flex gap-1">
-              {[["fleet", "Fleet"], ["map", "Carbon Map"], ["scaling", "Scaling"]].map(
+              {[["fleet", "Fleet"], ["efficiency", "Efficiency"], ["map", "Carbon Map"], ["scaling", "Scaling"]].map(
                 ([v, label]) => (
                   <button
                     key={v}
@@ -264,6 +265,7 @@ export default function App() {
               )}
             </div>
             {view === "fleet" && <ServerGrid servers={state?.servers} />}
+            {view === "efficiency" && <CarbonBreakdown />}
             {view === "map" && <RoutingMap />}
             {view === "scaling" && <ScalingBench servers={state?.servers} />}
           </div>
