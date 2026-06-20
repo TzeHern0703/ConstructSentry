@@ -8,6 +8,7 @@ import {
   runRemediate,
   runReset,
   applyAction,
+  setAutopilot,
 } from "./api";
 import { moodColor } from "./theme";
 import SummaryRow from "./components/SummaryRow";
@@ -99,6 +100,14 @@ export default function App() {
   }
 
   const onApply = (serverId, type) => withBusy(() => applyAction(serverId, type))();
+  const onAutopilot = async (on) => {
+    try {
+      await setAutopilot(on);
+      await refresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   const onScan = withBusy(async () => {
     setHealReport(null);
@@ -205,6 +214,8 @@ export default function App() {
           onHeal={onHeal}
           onReset={onReset}
           onReport={() => setReportOpen(true)}
+          onAutopilot={onAutopilot}
+          autopilot={summary?.autopilot}
           busy={busy}
           status={status}
         />

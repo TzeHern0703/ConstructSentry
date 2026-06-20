@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 
 from fastapi import FastAPI
@@ -86,7 +87,7 @@ def _refresh(state=None, emit=None) -> dict:
     state = state or state_store.load_state()
     results = orchestrator.run(state, emit=emit)
     summary = orchestrator.summarize(state, results)
-    _LAST = {"results": results, "summary": summary, "ts": time.time()}
+    _LAST = {"results": results, "summary": summary, "ts": time.time(), "state": state}
     _NARRATIVE = {
         "cyber": results["cyber"]["narrative"],
         "carbon": results["carbon"]["narrative"],
@@ -105,6 +106,13 @@ MONITOR_INTERVAL_SECONDS = 6
 _prev_sig: dict[str, tuple[str, str]] = {}
 _SEV_RANK = {"info": 0, "warning": 1, "critical": 2}
 
+# Autopilot: when on, the agent autonomously applies safe scaling actions in the
+# monitor loop (no human click) to keep every workload right-sized to its SLO.
+_autopilot = False
+_tick = 0
+_phase: dict[str, float] = {}
+LOAD_AMPLITUDE = 0.32  # request volume swings ±32% over time
+
 
 def _incident_signature(results: dict) -> dict:
     return {
@@ -113,16 +121,75 @@ def _incident_signature(results: dict) -> dict:
     }
 
 
+def _apply_load_wave(state, baseline):
+    """Drive a live traffic wave: latency = seed_latency × (seed_replicas /
+    current_replicas) × loadfactor(t). So real load fluctuates and latency
+    responds to BOTH demand and the current replica count — giving the
+    autoscaler something to continuously track."""
+    global _tick
+    for srv in state["servers"]:
+        if not srv.get("latency_slo_ms"):
+            continue
+        bsrv = state_store.get_server(baseline, srv["id"])
+        if not bsrv:
+            continue
+        seed_lat = bsrv["latency_p95_ms"]
+        seed_rep = max(1, bsrv.get("replicas", 1))
+        ph = _phase.setdefault(srv["id"], (hash(srv["id"]) % 100) / 100 * 6.283)
+        loadfactor = 1 + LOAD_AMPLITUDE * math.sin(_tick / 3.0 + ph)
+        rep = max(1, srv.get("replicas", 1))
+        srv["latency_p95_ms"] = max(5, round(seed_lat * seed_rep / rep * loadfactor))
+    _tick += 1
+
+
+def _autopilot_scale(state):
+    """Agent acts on its own: apply safe scale up/down so each workload meets its
+    SLO at the fewest replicas. Returns a list of applied action descriptions."""
+    applied = []
+    for srv in state["servers"]:
+        if not srv.get("latency_slo_ms"):
+            continue
+        finding = tools.check_scaling(srv)
+        if not finding:
+            continue
+        m = finding["metrics"]
+        before = srv.get("replicas", 1)
+        srv["replicas"] = m["target_replicas"]
+        srv["latency_p95_ms"] = m["projected_latency_ms"]
+        applied.append(
+            f"{srv['id']} {before}→{m['target_replicas']} replicas "
+            f"({'↓ headroom' if m['direction'] == 'down' else '↑ SLO breach'}, "
+            f"p95 ~{m['projected_latency_ms']}ms)"
+        )
+    return applied
+
+
 async def _monitor_loop():
     global _LAST, _prev_sig
     loop = asyncio.get_running_loop()
+    baseline = state_store.load_baseline()
     while True:
         await asyncio.sleep(MONITOR_INTERVAL_SECONDS)
         try:
-            state = await loop.run_in_executor(None, state_store.load_state)
-            results = await loop.run_in_executor(None, orchestrator.quick_results, state)
-            summary = orchestrator.summarize(state, results)
-            _LAST = {"results": results, "summary": summary, "ts": time.time()}
+            def sweep():
+                with state_store.transaction():
+                    state = state_store.load_state()
+                    _apply_load_wave(state, baseline)  # in-memory traffic wave
+                    auto = _autopilot_scale(state) if _autopilot else []
+                    # Persist only when the agent actually changed capacity — the
+                    # ephemeral latency wave doesn't churn the seed file.
+                    if auto:
+                        state_store.save_state(state)
+                results = orchestrator.quick_results(state)
+                summary = orchestrator.summarize(state, results)
+                return state, results, summary, auto
+
+            state, results, summary, auto = await loop.run_in_executor(None, sweep)
+            _LAST = {"results": results, "summary": summary, "ts": time.time(), "state": state}
+
+            for desc in auto:
+                broker.publish({"agent": "autopilot", "phase": "act",
+                                "text": f"🤖 Autopilot scaled {desc}", "severity": "info"})
 
             sig = _incident_signature(results)
             for sid, (cat, sev) in sig.items():
@@ -142,10 +209,10 @@ async def _monitor_loop():
                                     "severity": "info"})
             _prev_sig = sig
 
-            # Heartbeat so the feed visibly shows the monitor is always running.
+            mode = "AUTOPILOT" if _autopilot else "monitor"
             broker.publish({
                 "agent": "monitor", "phase": "reason",
-                "text": (f"sweep · {len(state['servers'])} nodes · "
+                "text": (f"{mode} sweep · {len(state['servers'])} nodes · "
                          f"{summary['total_carbon_kg']:.0f} kg CO2e · "
                          f"{summary['system_status']} · {len(sig)} active"),
                 "severity": "critical" if summary["system_status"] == "CRITICAL" else "info",
@@ -186,7 +253,10 @@ async def _startup():
 
 @app.get("/api/state")
 def get_state():
-    """Current cloud_state.json — all servers + status."""
+    """Current world — the monitor's live in-memory state (with the traffic
+    wave) when available, else the file."""
+    if _LAST and _LAST.get("state"):
+        return _LAST["state"]
     return state_store.load_state()
 
 
@@ -235,7 +305,19 @@ def get_summary():
         **last["summary"],
         "last_updated": last.get("ts"),
         "monitor_interval_s": MONITOR_INTERVAL_SECONDS,
+        "autopilot": _autopilot,
     }
+
+
+@app.post("/api/autopilot")
+def set_autopilot(on: bool):
+    """Toggle autonomous mode: the agent applies safe scaling itself."""
+    global _autopilot
+    _autopilot = on
+    broker.publish({"agent": "autopilot", "phase": "reason",
+                    "text": f"Autopilot {'ENABLED — agent will self-scale to SLO' if on else 'disabled — human-in-the-loop'}.",
+                    "severity": "info"})
+    return {"autopilot": _autopilot}
 
 
 @app.post("/api/scan")

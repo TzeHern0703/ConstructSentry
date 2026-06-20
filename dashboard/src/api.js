@@ -24,6 +24,7 @@ export const runRemediate = () => jpost("/api/remediate");
 export const runReset = () => jpost("/api/reset");
 export const applyAction = (serverId, type) =>
   jpost(`/api/action?server_id=${encodeURIComponent(serverId)}&type=${type}`);
+export const setAutopilot = (on) => jpost(`/api/autopilot?on=${on}`);
 
 // Subscribe to the live agent-thought SSE stream. Returns the EventSource so
 // the caller can close it on unmount.

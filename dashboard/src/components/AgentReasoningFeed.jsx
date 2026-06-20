@@ -14,6 +14,8 @@ const AGENT_COLOR = {
   attack_simulator: "#FF2D2D",
   remediation: "#46E0A0",
   investigator: "#5BA8FF",
+  autopilot: "#C77DFF",
+  monitor: "#6b7280",
   system: "#6b7280",
 };
 
