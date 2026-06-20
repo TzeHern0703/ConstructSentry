@@ -29,7 +29,7 @@ export default function IncidentList({ incidents, report, onApply, busy }) {
   const shown = (incidents ?? []).filter((i) => !SCALING.includes(i.action_type));
   return (
     <div className="flex flex-1 flex-col border border-white/10 bg-[var(--color-panel)]">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2">
         <span className="meta">Incidents · ranked</span>
         {report && (
           <span className="meta">
@@ -37,7 +37,7 @@ export default function IncidentList({ incidents, report, onApply, busy }) {
           </span>
         )}
       </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-3" style={{ maxHeight: "44vh" }}>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {shown.length === 0 && (
           <p className="meta text-[var(--color-slate)]">No incidents.</p>
         )}
