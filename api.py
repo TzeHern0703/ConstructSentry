@@ -88,12 +88,19 @@ def _refresh(state=None, emit=None) -> dict:
     state = state or state_store.load_state()
     results = orchestrator.run(state, emit=emit)
     summary = orchestrator.summarize(state, results)
+    # LLM-authored prioritized plan (for the AI Report + a live feed line).
+    plan = orchestrator.ai_action_plan(state, results)
     _LAST = {"results": results, "summary": summary, "ts": time.time(), "state": state}
     _NARRATIVE = {
         "cyber": results["cyber"]["narrative"],
         "carbon": results["carbon"]["narrative"],
+        "plan": plan,
         "provider": results["cyber"].get("provider"),
     }
+    if plan and emit:
+        first = plan.strip().split("\n")[0][:180]
+        emit({"agent": "orchestrator", "phase": "reason",
+              "text": f"Action plan ▸ {first}", "severity": "info"})
     return _LAST
 
 
@@ -279,6 +286,7 @@ def _findings_payload(last: dict) -> dict:
         "report": corr["report"],
         "cyber_narrative": _NARRATIVE["cyber"],
         "carbon_narrative": _NARRATIVE["carbon"],
+        "plan_narrative": _NARRATIVE.get("plan"),
         "provider": _NARRATIVE["provider"],
     }
 

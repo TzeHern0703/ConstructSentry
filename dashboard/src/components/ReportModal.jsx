@@ -68,6 +68,18 @@ export default function ReportModal({ open, onClose, summary, findings }) {
             </div>
           </div>
 
+          {/* LLM-authored prioritized plan — the decision, not just narration */}
+          {findings?.plan_narrative && (
+            <div className="border border-[#C77DFF]/50 bg-[#C77DFF]/5 p-3">
+              <div className="meta mb-1.5 flex items-center gap-1.5 text-[#C77DFF]">
+                <FileText size={13} /> Recommended action plan (AI)
+              </div>
+              <div className="text-xs leading-relaxed text-[var(--color-ink)]/90">
+                <Markdown text={findings.plan_narrative} />
+              </div>
+            </div>
+          )}
+
           {/* AI analysis */}
           <Section title="AI Analysis — Security" color="#5BA8FF">
             <Markdown text={findings?.cyber_narrative} />
@@ -226,6 +238,11 @@ function buildMarkdown({ summary, findings, ts }) {
   L.push(`- Monthly cost: $${(s.total_cost_usd ?? 0).toLocaleString()}`);
   L.push(`- Critical incidents: ${s.critical_count ?? 0}`);
   L.push("");
+  if (f.plan_narrative) {
+    L.push("## Recommended action plan (AI)");
+    L.push(f.plan_narrative);
+    L.push("");
+  }
   L.push("## AI Analysis — Security");
   L.push(f.cyber_narrative ?? "_n/a_");
   L.push("");

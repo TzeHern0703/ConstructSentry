@@ -420,6 +420,39 @@ def summarize(state, results):
     }
 
 
+def ai_action_plan(state, results):
+    """LLM-authored prioritized action plan: which incident to tackle FIRST and
+    WHY (ROI / risk / business). This is the LLM making a *decision*, not just
+    narrating. Returns None when offline."""
+    from llm import complete
+
+    incidents = results["orchestrator"]["incidents"]
+    if not incidents:
+        return None
+    summary = summarize(state, results)
+    rows = "\n".join(
+        f"- {i['server_id']} [{i['category_label']}] → {i['action_label']}: "
+        f"save ${i['monthly_savings_usd']}/mo, {i['carbon_prevented_kg']} kg CO2e"
+        + (" [SECURITY+CARBON]" if i["is_compound"] else "")
+        for i in incidents
+    )
+    prompt = (
+        f"System status: {summary['system_status']}, security {summary['security_score']}/100, "
+        f"recoverable ${summary['recoverable_usd']}/mo.\n\nIncidents:\n{rows}\n\n"
+        "As the orchestrator, give a PRIORITIZED action plan: which to do first "
+        "and why. Order by real risk (active compromise > orphaned access > "
+        "exposed > pure waste) then ROI. Be specific and decisive. "
+        "Numbered list, max 130 words."
+    )
+    return complete(
+        prompt,
+        system=("You are the orchestrator of a construction-cloud security+carbon "
+                "agent. You make the call on what to fix first and justify it "
+                "briefly for an operator."),
+        max_tokens=400,
+    )
+
+
 def quick_results(state):
     """Detection-only pipeline (no agent narratives / no LLM) for the continuous
     monitor. Same result shape as run(), computed straight from tools.py so it's
