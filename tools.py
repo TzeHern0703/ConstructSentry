@@ -556,25 +556,32 @@ def check_scaling(server):
         return None  # not a horizontally-scalable workload
     replicas = max(1, server.get("replicas", 1))
     latency = server.get("latency_p95_ms", 0)
+    forecast = server.get("latency_forecast_ms", latency)
     cpu = server.get("cpu_utilization", 0)
     carbon = compute_server_carbon(server)
     cost = carbon["monthly_cost_usd"]
     co2 = carbon["carbon_kg"]
 
-    # Minimum replicas that keep p95 latency within the SLO.
-    target = max(1, math.ceil(latency * replicas / slo))
+    # Scale UP on the predicted peak (pre-empt the breach); scale DOWN only on
+    # the current value (conservative — don't shrink on a momentary dip).
+    up_latency = max(latency, forecast)
+    target = max(1, math.ceil(up_latency * replicas / slo))
 
     if target > replicas:
-        new_lat = _projected_latency(latency, replicas, target)
+        new_lat = _projected_latency(up_latency, replicas, target)
         frac = (target - replicas) / replicas
+        predictive = latency <= slo < forecast  # current ok, forecast breaches
+        lead = (f"forecast {forecast}ms will breach the {slo}ms SLO soon — "
+                f"pre-scaling" if predictive
+                else f"p95 {latency}ms breaches the {slo}ms SLO — scaling")
         return make_finding(
             server, "SCALE_UP", "warning",
-            f"{server['id']} p95 latency {latency}ms breaches the {slo}ms SLO at "
-            f"{replicas} replicas. Scale up to {target} → ~{new_lat}ms (restores "
-            f"SLO): +${round(cost * frac):,}/mo, +{round(co2 * frac, 1)} kg CO2e/mo.",
+            f"{server['id']}: {lead} up to {target} replicas → ~{new_lat}ms: "
+            f"+${round(cost * frac):,}/mo, +{round(co2 * frac, 1)} kg CO2e/mo.",
             "check_scaling", "carbon",
             target_replicas=target, current_replicas=replicas,
             latency_ms=latency, slo_ms=slo, projected_latency_ms=new_lat,
+            predictive=predictive,
             extra_cost_usd=round(cost * frac), extra_carbon_kg=round(co2 * frac, 1),
             direction="up",
         )

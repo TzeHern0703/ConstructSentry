@@ -147,6 +147,10 @@ def _apply_load_wave(state, baseline):
                       + random.uniform(-LOAD_JITTER, LOAD_JITTER))
         rep = max(1, srv.get("replicas", 1))
         srv["latency_p95_ms"] = max(5, round(seed_lat * seed_rep / rep * loadfactor))
+        # Short-horizon forecast (next ~3 sweeps, smooth trend) so the agent can
+        # PRE-scale before a predicted breach instead of only reacting.
+        peak = max(1 + LOAD_AMPLITUDE * math.sin((_tick + k) / 2.0 + ph) for k in (1, 2, 3))
+        srv["latency_forecast_ms"] = max(5, round(seed_lat * seed_rep / rep * peak))
     _tick += 1
 
 
