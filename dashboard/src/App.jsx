@@ -9,6 +9,8 @@ import {
   runReset,
   applyAction,
   setAutopilot,
+  approveAction,
+  denyAction,
   openStream,
 } from "./api";
 import { moodColor } from "./theme";
@@ -115,6 +117,24 @@ export default function App() {
   }
 
   const onApply = (serverId, type) => withBusy(() => applyAction(serverId, type))();
+
+  async function onApprove(serverId) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const resp = await approveAction(serverId);
+      await refresh();
+      if (resp.report) {
+        setHealReport(resp.report);
+        setTimeout(() => setHealReport(null), HEALED_WINDOW_MS);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const onDeny = (serverId) => withBusy(() => denyAction(serverId))();
   const onAutopilot = async (on) => {
     try {
       await setAutopilot(on);
@@ -175,6 +195,34 @@ export default function App() {
           API error: {error} — is uvicorn running on :8000?
         </p>
       )}
+
+      {(summary?.pending_approvals ?? []).map((p) => (
+        <div
+          key={p.server_id}
+          className="mx-6 mt-3 flex flex-wrap items-center gap-3 border border-[#C77DFF] bg-[#C77DFF]/10 px-4 py-2"
+        >
+          <span className="meta text-[#C77DFF]">🤖 Agent requests approval</span>
+          <span className="text-sm">
+            Heal compromised host <b>{p.server_id}</b> (isolate → kill → rotate → verify)?
+          </span>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => onApprove(p.server_id)}
+              disabled={busy}
+              className="meta border border-[var(--color-healthy)] bg-[var(--color-healthy)] px-3 py-1.5 font-bold text-black disabled:opacity-50"
+            >
+              Approve
+            </button>
+            <button
+              onClick={() => onDeny(p.server_id)}
+              disabled={busy}
+              className="meta border border-white/30 px-3 py-1.5 hover:bg-white/5 disabled:opacity-50"
+            >
+              Deny
+            </button>
+          </div>
+        </div>
+      ))}
 
       {healPlanOpen && (
         <HealPlanModal

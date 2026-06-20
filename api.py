@@ -110,6 +110,8 @@ _SEV_RANK = {"info": 0, "warning": 1, "critical": 2}
 # Autopilot: when on, the agent autonomously applies safe scaling actions in the
 # monitor loop (no human click) to keep every workload right-sized to its SLO.
 _autopilot = False
+# Pending high-stakes actions awaiting operator approval (server_id -> request).
+_pending: dict[str, dict] = {}
 _tick = 0
 _phase: dict[str, float] = {}
 # Realistic traffic: small, high-frequency jitter (not big slow swings), so
@@ -197,33 +199,24 @@ async def _monitor_loop():
                 broker.publish({"agent": "autopilot", "phase": "act",
                                 "text": f"🤖 Autopilot scaled {desc}", "severity": "info"})
 
-            # Heal is an agent skill too: when autonomous, the agent remediates
-            # any compromised host itself (isolate → kill → rotate → verify).
+            # Graduated autonomy: the agent auto-does SAFE actions (scaling), but
+            # a high-stakes action (healing a compromised prod host = killing
+            # processes) is GATED behind human approval — even in Autopilot. So
+            # it raises an approval request instead of acting on its own.
+            compromised = {i["server_id"] for i in results["orchestrator"]["incidents"]
+                           if i["category"] == "compromised_host"}
             if _autopilot:
-                compromised = [i["server_id"] for i in results["orchestrator"]["incidents"]
-                               if i["category"] == "compromised_host"]
-                if compromised:
-                    broker.publish({"agent": "autopilot", "phase": "reason",
-                                    "text": f"🤖 Compromised host detected ({', '.join(compromised)}) — auto-healing.",
-                                    "severity": "critical"})
-
-                    def heal_all():
-                        reps = []
-                        for sid in compromised:
-                            rep = remediation.remediate(target_id=sid,
-                                                        emit=lambda e: broker.publish(e))
-                            reps.append({k: v for k, v in rep.items() if k != "state"})
-                        return _refresh_fast(), reps
-
-                    last, reps = await loop.run_in_executor(None, heal_all)
-                    results, summary, state = last["results"], last["summary"], last["state"]
-                    # Broadcast the heal report so the dashboard shows the same
-                    # "what was solved" summary card as a manual heal.
-                    for rep in reps:
-                        broker.publish({"agent": "autopilot", "phase": "heal_done",
-                                        "report": rep, "severity": "info",
-                                        "text": f"🤖 Autopilot healed {rep['target']} — "
-                                                f"{rep['headline'][:70]}"})
+                for sid in compromised:
+                    if sid not in _pending:
+                        _pending[sid] = {"server_id": sid, "type": "heal", "ts": time.time()}
+                        broker.publish({"agent": "autopilot", "phase": "reason",
+                                        "text": f"🤖 Compromised host {sid} detected — "
+                                                f"requesting operator approval to heal.",
+                                        "severity": "critical"})
+            # Drop stale requests for hosts that are no longer compromised.
+            for sid in list(_pending):
+                if sid not in compromised:
+                    _pending.pop(sid, None)
 
             sig = _incident_signature(results)
             for sid, (cat, sev) in sig.items():
@@ -373,7 +366,39 @@ def get_summary():
         "last_updated": last.get("ts"),
         "monitor_interval_s": MONITOR_INTERVAL_SECONDS,
         "autopilot": _autopilot,
+        "pending_approvals": list(_pending.values()),
     }
+
+
+@app.post("/api/approve")
+async def approve_action(server_id: str):
+    """Operator approves a gated action — execute the heal now."""
+    if server_id not in _pending:
+        return {"ok": False}
+    loop = asyncio.get_running_loop()
+    rep = await loop.run_in_executor(
+        None,
+        lambda: {k: v for k, v in
+                 remediation.remediate(target_id=server_id,
+                                       emit=lambda e: broker.publish(e)).items()
+                 if k != "state"},
+    )
+    _pending.pop(server_id, None)
+    last = await loop.run_in_executor(None, _refresh_fast)
+    broker.publish({"agent": "autopilot", "phase": "heal_done", "report": rep,
+                    "severity": "info",
+                    "text": f"✅ Operator approved — healed {server_id}"})
+    return {"ok": True, "report": rep, "summary": last["summary"]}
+
+
+@app.post("/api/deny")
+def deny_action(server_id: str):
+    """Operator denies a gated action — leave the host as-is."""
+    _pending.pop(server_id, None)
+    broker.publish({"agent": "autopilot", "phase": "observe",
+                    "text": f"Operator denied heal for {server_id} — left as-is.",
+                    "severity": "warning"})
+    return {"ok": True}
 
 
 @app.post("/api/autopilot")
