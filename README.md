@@ -23,6 +23,21 @@ re-scanning** rather than assumed.
 
 ---
 
+## Run it in one click (no local setup)
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/TzeHern0703/ConstructSentry)
+
+Click the badge (or **Code → Codespaces → Create codespace on main** on GitHub).
+The codespace auto-installs everything and starts both servers; when the
+**Dashboard (port 5173)** preview opens, you're live. (Runs in offline mode —
+fallback carbon + deterministic reasoning — unless you add keys; see below.)
+
+> To use live data in a codespace, add **Codespaces secrets**
+> (`ELECTRICITY_MAPS_API_KEY`, `GEMINI_API_KEY`) under the repo's
+> Settings → Secrets and variables → Codespaces, then rebuild.
+
+---
+
 ## What's real vs. simulated
 
 - ✅ **Real** detection logic (security rules + a non-linear power/carbon model

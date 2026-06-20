@@ -1,0 +1,14 @@
+{
+  "name": "ConstructSentry",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "forwardPorts": [5173, 8000],
+  "portsAttributes": {
+    "5173": { "label": "Dashboard", "onAutoForward": "openPreview" },
+    "8000": { "label": "API", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "pip install -r requirements.txt && cd dashboard && npm install",
+  "postStartCommand": "bash .devcontainer/start.sh"
+}
