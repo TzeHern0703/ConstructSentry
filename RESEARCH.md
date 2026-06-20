@@ -145,14 +145,45 @@ PUE: cold grids ≈ 1.1, hot/humid ≈ 1.5.
 
 ---
 
+## 4b. Recommended actions, Carbon Map & Apply
+
+Each incident gets a **per-workload action** (shown as a coloured chip), chosen
+from signals:
+
+| Signal | Recommended action | Savings model |
+|---|---|---|
+| Owner contract inactive (orphaned) | **Terminate** (default) | 100% cost + carbon |
+| Idle but still contracted + has a task | **Hibernate** (default) | ~85% cost, ~95% carbon (disk kept) |
+| Large instance, in use | **Right-size** | ~70% |
+| Deferrable, dirty grid, relocatable | **Route** | grid delta − transit |
+| Deferrable, residency-locked | **Time-shift** | real intraday swing |
+| Active compromise | **Isolate & restore** | reclaim instance + attack delta |
+| Pure misconfig | **Harden** | security only |
+
+Where it matters (idle/unneeded servers) the card shows a **Terminate ↔
+Hibernate** toggle — switching shows that option's numbers + tradeoff. **Apply**
+*executes* it: terminate removes the instance from the fleet; hibernate stops
+its compute (`status: hibernated`, ~3% disk-only power, excluded from
+detection). The fleet, **Carbon Map**, wasted spend and total carbon all update.
+
+The **Carbon Map** (left-panel "Carbon Map" tab) shows region lanes ordered
+cleanest-grid-first, coloured by live intensity, each server a chip (🔒 =
+residency-locked, can't move). It polls `/api/regions` every 3 s, so live grid
+changes and any region edits show up automatically.
+
+---
+
 ## 5. How to check a change took effect
 
 1. **Dashboard** — wait ~6 s; numbers, server cards, incidents update on their
    own. The Agent feed prints `New incident: <server> — <category>`.
 2. **Command line:**
    ```bash
-   curl -s http://localhost:5173/api/summary    # score / carbon / cost / status
-   curl -s http://localhost:5173/api/findings   # all findings + correlated incidents
+   curl -s http://localhost:5173/api/summary    # score / carbon / recoverable / status
+   curl -s http://localhost:5173/api/findings   # findings + incidents + actions
+   curl -s http://localhost:5173/api/regions    # per-region intensity (Carbon Map)
+   # execute a lifecycle action:
+   curl -s -X POST "http://localhost:5173/api/action?server_id=blueline-staging-07&type=terminate"
    ```
 3. **Restore:** click **Reset** (or `curl -X POST http://localhost:5173/api/reset`).
 
@@ -185,6 +216,12 @@ Edit `cloud_state.json`, save, wait ~6 s, observe. (Server names are the `id`.)
 6. **Asset weighting**
    Compromise the same server with `asset_criticality` set to `"critical"` vs
    `"low"`; compare the security score (capped ~26 vs ~49).
+
+7. **Terminate vs Hibernate (action changes the result)**
+   On the `blueline-staging-07` incident, toggle **Terminate** vs **Hibernate**
+   (numbers differ), then **Apply**: terminate drops the fleet 10→9 and wasted
+   spend $4,110→$2,870; reset and instead **Hibernate** `bim-archive-render-02`
+   to watch total carbon fall ~1790→~1090 kg (it's the biggest emitter).
 
 ---
 

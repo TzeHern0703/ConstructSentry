@@ -113,6 +113,21 @@ Things that are easy to get wrong in a PoC and how this project handles them:
   and refuses cross-border moves for **residency-locked** blueprint data —
   time-shifting in-region instead. The time-shift saving is computed from each
   grid's **real last-24h swing** (Electricity Maps history), not a constant.
+- **Per-workload lifecycle actions (not one-size-fits-all "shut down").** The
+  orchestrator recommends the *right* action per server — **terminate** (gone
+  for good), **hibernate** (stop compute, keep disk, wake on demand),
+  **right-size**, **route**, or **time-shift** — each with its own savings math.
+  Idle/unneeded servers expose a **terminate ↔ hibernate toggle** (the choice
+  changes the numbers), and **Apply** actually executes it: terminate removes
+  the instance, hibernate stops it — so the fleet, Carbon Map, wasted spend and
+  total carbon all visibly update.
+- **Workload-routing visualization (Carbon Map).** Region lanes ordered
+  cleanest-grid-first, coloured by *live* carbon intensity, with each server as
+  a chip in its region (residency-locked workloads marked 🔒) — makes the
+  "route to a greener grid vs time-shift in place" decision tangible.
+- **Actionable cost metric.** The headline money number is *recoverable/wasted
+  spend* (what you can reclaim by acting on the incidents), not static total
+  spend — so it's meaningful and moves through the demo.
 - **Verified remediation.** Heal is modelled as discrete IR steps (isolate →
   kill process → rotate credentials) where killing the process is what lowers
   CPU; the host then settles into its legitimate operating range (not a frozen
@@ -178,8 +193,10 @@ server proxies `/api` to the backend on `:8000`.
    and a verified savings report slides in.
 
 Throughout, the **Agent Reasoning** feed streams live Reason→Act→Observe steps
-(including the monitor's heartbeat), and the **AI Analysis** panel shows the
-LLM's security/carbon summaries.
+(including the monitor's heartbeat). Toggle the left panel to **Carbon Map** to
+see workloads by grid intensity; on an incident, switch **Terminate ↔ Hibernate**
+and hit **Apply** to execute it; and **AI Report** exports the full LLM analysis
+as Markdown.
 
 ---
 
