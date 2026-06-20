@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import random
 import time
 
 from fastapi import FastAPI
@@ -111,7 +112,10 @@ _SEV_RANK = {"info": 0, "warning": 1, "critical": 2}
 _autopilot = False
 _tick = 0
 _phase: dict[str, float] = {}
-LOAD_AMPLITUDE = 0.32  # request volume swings ±32% over time
+# Realistic traffic: small, high-frequency jitter (not big slow swings), so
+# latency wiggles constantly but actual scale up/down events stay infrequent.
+LOAD_AMPLITUDE = 0.08   # ±8% smooth swing
+LOAD_JITTER = 0.04      # ±4% per-tick noise
 
 
 def _incident_signature(results: dict) -> dict:
@@ -136,7 +140,9 @@ def _apply_load_wave(state, baseline):
         seed_lat = bsrv["latency_p95_ms"]
         seed_rep = max(1, bsrv.get("replicas", 1))
         ph = _phase.setdefault(srv["id"], (hash(srv["id"]) % 100) / 100 * 6.283)
-        loadfactor = 1 + LOAD_AMPLITUDE * math.sin(_tick / 3.0 + ph)
+        loadfactor = (1
+                      + LOAD_AMPLITUDE * math.sin(_tick / 2.0 + ph)
+                      + random.uniform(-LOAD_JITTER, LOAD_JITTER))
         rep = max(1, srv.get("replicas", 1))
         srv["latency_p95_ms"] = max(5, round(seed_lat * seed_rep / rep * loadfactor))
     _tick += 1
