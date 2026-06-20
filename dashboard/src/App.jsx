@@ -188,7 +188,7 @@ export default function App() {
     mood === "CRITICAL" ? "state-critical" : mood === "HEALED" ? "state-healed" : "";
 
   return (
-    <div className={`relative flex h-screen flex-col overflow-hidden ${stateClass}`}>
+    <div className={`relative flex min-h-full flex-col ${stateClass}`}>
       <Header status={mood} mood={moodHex} critical={mood === "CRITICAL"} source={summary?.intensity_source} />
 
       {error && (
@@ -241,9 +241,9 @@ export default function App() {
         findings={findings}
       />
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden p-6 lg:grid-cols-5">
+      <main className="grid flex-1 grid-cols-1 gap-4 p-6 lg:grid-cols-5">
         {/* LEFT 60% */}
-        <section className="flex min-h-0 flex-col gap-4 overflow-y-auto lg:col-span-3">
+        <section className="flex flex-col gap-4 lg:col-span-3">
           <SummaryRow summary={summary} />
           <div>
             <div className="mb-2 flex gap-1">
@@ -273,7 +273,7 @@ export default function App() {
         </section>
 
         {/* RIGHT 40% */}
-        <section className="flex min-h-0 flex-col gap-4 lg:col-span-2">
+        <section className="flex flex-col gap-4 lg:col-span-2">
           <AgentReasoningFeed />
           <IncidentList
             incidents={findings?.incidents}

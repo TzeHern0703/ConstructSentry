@@ -46,8 +46,8 @@ export default function AgentReasoningFeed() {
   }, [lines]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border border-white/10 bg-[var(--color-panel)]">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2">
+    <div className="flex min-h-72 flex-col border border-white/10 bg-[var(--color-panel)]">
+      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
         <span className="meta">Agent Reasoning · live</span>
         <span className="meta flex items-center gap-1">
           <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--color-healthy)]" />
@@ -56,7 +56,8 @@ export default function AgentReasoningFeed() {
       </div>
       <div
         ref={scrollRef}
-        className="feed min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed"
+        className="feed flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed"
+        style={{ maxHeight: "46vh" }}
       >
         {lines.length === 0 && (
           <p className="text-[var(--color-slate)]">
