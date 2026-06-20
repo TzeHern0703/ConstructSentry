@@ -9,6 +9,7 @@ import {
   runReset,
   applyAction,
   setAutopilot,
+  openStream,
 } from "./api";
 import { moodColor } from "./theme";
 import SummaryRow from "./components/SummaryRow";
@@ -65,6 +66,18 @@ export default function App() {
       alive = false;
       clearInterval(id);
     };
+  }, []);
+
+  // When the agent auto-heals (Autopilot), show the same "what was solved"
+  // summary card a manual heal shows.
+  useEffect(() => {
+    const es = openStream((event) => {
+      if (event.phase === "heal_done" && event.report) {
+        setHealReport(event.report);
+        setTimeout(() => setHealReport(null), HEALED_WINDOW_MS);
+      }
+    });
+    return () => es.close();
   }, []);
 
   // Pull fresh summary + state immediately after an action (don't wait for the

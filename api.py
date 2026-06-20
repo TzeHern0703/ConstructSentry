@@ -191,6 +191,34 @@ async def _monitor_loop():
                 broker.publish({"agent": "autopilot", "phase": "act",
                                 "text": f"🤖 Autopilot scaled {desc}", "severity": "info"})
 
+            # Heal is an agent skill too: when autonomous, the agent remediates
+            # any compromised host itself (isolate → kill → rotate → verify).
+            if _autopilot:
+                compromised = [i["server_id"] for i in results["orchestrator"]["incidents"]
+                               if i["category"] == "compromised_host"]
+                if compromised:
+                    broker.publish({"agent": "autopilot", "phase": "reason",
+                                    "text": f"🤖 Compromised host detected ({', '.join(compromised)}) — auto-healing.",
+                                    "severity": "critical"})
+
+                    def heal_all():
+                        reps = []
+                        for sid in compromised:
+                            rep = remediation.remediate(target_id=sid,
+                                                        emit=lambda e: broker.publish(e))
+                            reps.append({k: v for k, v in rep.items() if k != "state"})
+                        return _refresh_fast(), reps
+
+                    last, reps = await loop.run_in_executor(None, heal_all)
+                    results, summary, state = last["results"], last["summary"], last["state"]
+                    # Broadcast the heal report so the dashboard shows the same
+                    # "what was solved" summary card as a manual heal.
+                    for rep in reps:
+                        broker.publish({"agent": "autopilot", "phase": "heal_done",
+                                        "report": rep, "severity": "info",
+                                        "text": f"🤖 Autopilot healed {rep['target']} — "
+                                                f"{rep['headline'][:70]}"})
+
             sig = _incident_signature(results)
             for sid, (cat, sev) in sig.items():
                 prev = _prev_sig.get(sid)
@@ -220,6 +248,18 @@ async def _monitor_loop():
         except Exception as exc:
             broker.publish({"agent": "monitor", "phase": "observe",
                             "text": f"monitor error: {exc}", "severity": "info"})
+
+
+def _refresh_fast(state=None) -> dict:
+    """Detection-only refresh (no LLM) for the mutating endpoints, so buttons
+    respond instantly instead of blocking on narrative generation. The LLM
+    narrative is kept from the last /api/scan and regenerated on demand."""
+    global _LAST
+    state = state or state_store.load_state()
+    results = orchestrator.quick_results(state)
+    summary = orchestrator.summarize(state, results)
+    _LAST = {"results": results, "summary": summary, "ts": time.time(), "state": state}
+    return _LAST
 
 
 def _ensure() -> dict:
@@ -339,7 +379,7 @@ async def post_attack():
     result = await loop.run_in_executor(
         None, lambda: attack_simulator.simulate_attack(emit=emit)
     )
-    last = await loop.run_in_executor(None, lambda: _refresh(result["state"], emit))
+    last = await loop.run_in_executor(None, lambda: _refresh_fast(result["state"]))
     broker.publish({"agent": "system", "phase": "done",
                     "text": "Attack simulated.", "severity": "critical"})
     return {
@@ -363,7 +403,7 @@ async def post_remediate(steps: str | None = None):
     report = await loop.run_in_executor(
         None, lambda: remediation.remediate(emit=emit, steps=step_list)
     )
-    last = await loop.run_in_executor(None, lambda: _refresh(report["state"], emit))
+    last = await loop.run_in_executor(None, lambda: _refresh_fast(report["state"]))
     broker.publish({"agent": "system", "phase": "done",
                     "text": "Remediation complete.", "severity": "info"})
     # Drop the bulky state from the report; the dashboard polls /api/state.
@@ -412,7 +452,7 @@ async def post_action(server_id: str, type: str):
         broker.publish({"agent": "orchestrator", "phase": "act",
                         "text": f"{type.capitalize()} applied to {server_id}.",
                         "severity": "info"})
-    last = await loop.run_in_executor(None, lambda: _refresh())
+    last = await loop.run_in_executor(None, lambda: _refresh_fast())
     return {"ok": ok, "summary": last["summary"], "findings": _findings_payload(last)}
 
 
@@ -421,7 +461,7 @@ async def post_reset():
     """Convenience for re-running the demo: restore the pristine baseline."""
     loop = asyncio.get_running_loop()
     state = await loop.run_in_executor(None, state_store.reset_to_baseline)
-    last = await loop.run_in_executor(None, lambda: _refresh(state))
+    last = await loop.run_in_executor(None, lambda: _refresh_fast(state))
     return {"summary": last["summary"]}
 
 
