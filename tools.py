@@ -26,8 +26,8 @@ from __future__ import annotations
 import math
 
 from carbon_data import (
+    get_carbon_forecast,
     get_carbon_intensity,
-    get_intraday_shift,
     get_pue,
     greenest_region,
 )
@@ -234,9 +234,12 @@ def _greening_plan(server, carbon, intensity):
     gross_savings = round(carbon["carbon_kg"] - greener_kg, 1)
     dataset_gb = server.get("dataset_size_gb", 0)
     transit_kg = round(transit_carbon_kg(dataset_gb, intensity.gco2_per_kwh), 1)
-    # Time-shift saving is derived from the region's real last-24h grid swing,
-    # not a hardcoded fraction.
-    shift_frac, shift_src = get_intraday_shift(server["region"])
+    # Time-shift uses the real 24h carbon FORECAST: schedule the deferrable job
+    # to the greenest upcoming window, not just "some other time".
+    fc = get_carbon_forecast(server["region"])
+    shift_frac = fc.reduction_pct / 100.0
+    shift_src = fc.source
+    shift_window = fc.window_label()
     shift_kg = round(carbon["carbon_kg"] * shift_frac, 1)
 
     # 1) Data sovereignty: residency-locked data must not move cross-border.
@@ -245,9 +248,10 @@ def _greening_plan(server, carbon, intensity):
         action = (
             f"Data is residency-locked to {residency} — relocating to "
             f"{g_region} would save ~{gross_savings} kg/mo but is barred by data "
-            f"sovereignty (and would cost ~{transit_kg} kg one-time transit for "
-            f"{dataset_gb} GB). Instead, time-shift this deferrable job to the "
-            f"grid's greenest hours in-region: ~{shift_kg} kg/mo, no data moved."
+            f"sovereignty. Instead, time-shift this deferrable job to the "
+            f"greenest forecast window ({shift_window}, ~{fc.best_intensity:.0f} "
+            f"gCO2/kWh, −{round(shift_frac*100)}% vs now): ~{shift_kg} kg/mo, "
+            f"no data moved."
         )
         return action, {
             "plan": "time_shift",
@@ -258,6 +262,8 @@ def _greening_plan(server, carbon, intensity):
             "transit_kg": transit_kg,
             "savings_kg": shift_kg,
             "shift_pct": round(shift_frac * 100),
+            "shift_window": shift_window,
+            "forecast_best": fc.best_intensity,
             "shift_source": shift_src,
         }
 
@@ -267,7 +273,8 @@ def _greening_plan(server, carbon, intensity):
         action = (
             f"Keep in-region: relocating to {g_region} would save only "
             f"~{gross_savings} kg/mo but moving {dataset_gb} GB costs ~{transit_kg} "
-            f"kg transit (net {net} kg). Time-shift to greener hours instead: "
+            f"kg transit (net {net} kg). Time-shift to the greenest forecast "
+            f"window ({shift_window}, −{round(shift_frac*100)}%) instead: "
             f"~{shift_kg} kg/mo."
         )
         return action, {
@@ -278,6 +285,8 @@ def _greening_plan(server, carbon, intensity):
             "transit_kg": transit_kg,
             "savings_kg": shift_kg,
             "shift_pct": round(shift_frac * 100),
+            "shift_window": shift_window,
+            "forecast_best": fc.best_intensity,
             "shift_source": shift_src,
         }
 

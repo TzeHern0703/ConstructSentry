@@ -337,6 +337,27 @@ def get_regions():
     return {"regions": ordered, "greenest": greenest}
 
 
+@app.get("/api/forecast")
+def get_forecast():
+    """Next-24h carbon forecast per region + the greenest upcoming window —
+    powers temporal (carbon-aware) scheduling of deferrable workloads."""
+    from carbon_data import get_carbon_forecast
+
+    state = state_store.load_state()
+    out = {}
+    for region in sorted({s["region"] for s in state["servers"]}):
+        f = get_carbon_forecast(region)
+        out[region] = {
+            "now": f.now,
+            "points": [p["intensity"] for p in f.points],
+            "best_offset_h": f.best_offset_h,
+            "best_intensity": f.best_intensity,
+            "reduction_pct": f.reduction_pct,
+            "source": f.source,
+        }
+    return out
+
+
 @app.get("/api/summary")
 def get_summary():
     """Totals: security score, total carbon, total cost, # critical, status."""

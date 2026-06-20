@@ -214,6 +214,12 @@ def _recommend(category, server, carbon, finding_types, metrics):
     saved_co2 = metrics.get("savings_kg", round(co2 * 0.5, 1))
     relocate_to = metrics.get("relocate_to", "a greener region")
     transit_kg = metrics.get("transit_kg", 0)
+    window = metrics.get("shift_window", "soon")
+    spct = metrics.get("shift_pct", 0)
+    best = metrics.get("forecast_best")
+    win_phrase = (f"the greenest forecast window ({window}"
+                  + (f", ~{best:.0f} gCO2/kWh" if best else "")
+                  + f", −{spct}% vs now)")
     if metrics.get("plan") == "relocate":
         action = (f"Relocate to {relocate_to} — net carbon win after the one-time "
                   f"~{transit_kg} kg data-transit cost.")
@@ -221,13 +227,13 @@ def _recommend(category, server, carbon, finding_types, metrics):
         action_type = "route"
     elif metrics.get("residency_locked"):
         action = (f"Data residency-locked to {metrics.get('residency')}: cannot move "
-                  f"cross-border. Time-shift to the grid's greenest hours in-region.")
-        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift (no data moved)"
+                  f"cross-border. Schedule it to {win_phrase}.")
+        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo by scheduling to {window} (no data moved)"
         action_type = "time_shift"
     else:
-        action = ("Transit carbon would cancel the relocation gain — time-shift to "
-                  "greener hours in-region instead.")
-        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift"
+        action = (f"Transit carbon would cancel the relocation gain — schedule to "
+                  f"{win_phrase} instead.")
+        carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo by scheduling to {window}"
         action_type = "time_shift"
     wins = ["Security: no change", "Cost: ~$0/mo (same compute)", carbon_win]
     return action, 0, saved_co2, wins, action_type, []

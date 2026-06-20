@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Lock, Leaf } from "lucide-react";
-import { getRegions } from "../api";
+import { Lock, Leaf, Clock } from "lucide-react";
+import { getRegions, getForecast } from "../api";
 
 // Workload-routing visualization: region lanes ordered cleanest-grid first,
 // coloured by live carbon intensity, with each server as a chip in its region.
@@ -9,10 +9,14 @@ import { getRegions } from "../api";
 // clean capacity is. Residency-locked workloads are marked 🔒 (can't move).
 export default function RoutingMap() {
   const [data, setData] = useState(null);
+  const [forecast, setForecast] = useState({});
 
   useEffect(() => {
     let alive = true;
-    const tick = () => getRegions().then((d) => alive && setData(d)).catch(() => {});
+    const tick = () => {
+      getRegions().then((d) => alive && setData(d)).catch(() => {});
+      getForecast().then((f) => alive && setForecast(f)).catch(() => {});
+    };
     tick();
     const id = setInterval(tick, 3000);
     return () => { alive = false; clearInterval(id); };
@@ -25,15 +29,33 @@ export default function RoutingMap() {
   return (
     <div>
       <p className="meta mb-2">
-        Carbon by region · cleanest first · greenest ={" "}
-        <span className="text-[var(--color-healthy)]">{data.greenest}</span> (route target)
+        Carbon by region · live + 24h forecast · greenest ={" "}
+        <span className="text-[var(--color-healthy)]">{data.greenest}</span>
       </p>
       <div className="space-y-1.5">
         {data.regions.map((r) => (
-          <Lane key={r.region} r={r} max={max} greenest={r.region === data.greenest} />
+          <Lane key={r.region} r={r} max={max} greenest={r.region === data.greenest}
+                fc={forecast[r.region]} />
         ))}
       </div>
     </div>
+  );
+}
+
+// Tiny 24h forecast sparkline with the greenest upcoming hour marked.
+function Sparkline({ pts, bestIdx }) {
+  if (!pts || pts.length < 2) return null;
+  const w = 120, h = 16;
+  const min = Math.min(...pts), max = Math.max(...pts);
+  const span = max - min || 1;
+  const x = (i) => (i / (pts.length - 1)) * w;
+  const y = (v) => h - ((v - min) / span) * (h - 2) - 1;
+  const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return (
+    <svg width={w} height={h} className="overflow-visible">
+      <path d={d} fill="none" stroke="#6b7280" strokeWidth="1" />
+      <circle cx={x(bestIdx)} cy={y(pts[bestIdx])} r="2.2" fill="#1FB57A" />
+    </svg>
   );
 }
 
@@ -43,7 +65,7 @@ function intensityColor(v) {
   return "#E0A106";                 // mid
 }
 
-function Lane({ r, max, greenest }) {
+function Lane({ r, max, greenest, fc }) {
   const color = intensityColor(r.intensity);
   const widthPct = Math.max(8, (r.intensity / max) * 100);
   return (
@@ -61,6 +83,15 @@ function Lane({ r, max, greenest }) {
       <div className="mt-1 h-1.5 w-full bg-white/5">
         <div className="h-full" style={{ width: `${widthPct}%`, background: color }} />
       </div>
+      {/* 24h forecast sparkline + greenest upcoming window */}
+      {fc && fc.reduction_pct > 0 && (
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <Sparkline pts={fc.points} bestIdx={fc.best_offset_h} />
+          <span className="meta flex items-center gap-1 normal-case tracking-normal text-[var(--color-healthy)]">
+            <Clock size={10} /> greenest +{fc.best_offset_h}h (−{fc.reduction_pct}%)
+          </span>
+        </div>
+      )}
       {/* server chips */}
       <div className="mt-1.5 flex flex-wrap gap-1">
         {r.servers.map((s) => (

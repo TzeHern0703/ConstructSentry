@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover
 
 ELECTRICITY_MAPS_URL = "https://api.electricitymap.org/v3/carbon-intensity/latest"
 ELECTRICITY_MAPS_HISTORY_URL = "https://api.electricitymap.org/v3/carbon-intensity/history"
+ELECTRICITY_MAPS_FORECAST_URL = "https://api.electricitymap.org/v3/carbon-intensity/forecast"
 
 # Read the API key from the environment so we never hardcode secrets.
 API_KEY = os.environ.get("ELECTRICITY_MAPS_API_KEY", "").strip()
@@ -184,6 +185,86 @@ def clear_cache() -> None:
     """Reset the in-process cache (useful for tests / re-scans)."""
     _cache.clear()
     _shift_cache.clear()
+    _forecast_cache.clear()
+
+
+# --- Carbon forecast (predictive, temporal scheduling) ---------------------
+
+@dataclass
+class CarbonForecast:
+    region: str
+    source: str                 # "live" | "fallback"
+    now: float                  # current intensity
+    points: list                # [{"offset_h": int, "intensity": float}]
+    best_offset_h: int          # hours from now to the greenest window
+    best_intensity: float
+    reduction_pct: int          # how much cleaner the best window is vs now
+
+    def window_label(self) -> str:
+        if self.best_offset_h <= 0:
+            return "now"
+        return f"+{self.best_offset_h}h"
+
+
+_forecast_cache: dict[str, CarbonForecast] = {}
+FORECAST_HOURS = 24
+
+
+def _fallback_forecast(region: str) -> CarbonForecast:
+    """Synthesize a realistic daily curve when the API is unavailable: grids are
+    cleaner overnight (lower demand) — dips around 03:00, peaks late afternoon."""
+    import datetime
+    base = CARBON_INTENSITY_FALLBACK.get(region, DEFAULT_INTENSITY)
+    hour_now = datetime.datetime.now().hour
+    pts = []
+    for h in range(FORECAST_HOURS):
+        clock = (hour_now + h) % 24
+        # ±22% daily swing, minimum near 03:00.
+        factor = 1 - 0.22 * math.cos((clock - 15) / 24 * 2 * math.pi)
+        pts.append({"offset_h": h, "intensity": round(base * factor)})
+    now_val = pts[0]["intensity"]
+    best = min(pts, key=lambda p: p["intensity"])
+    red = round((now_val - best["intensity"]) / now_val * 100) if now_val else 0
+    return CarbonForecast(region, "fallback", now_val, pts,
+                          best["offset_h"], best["intensity"], red)
+
+
+def get_carbon_forecast(region: str, use_cache: bool = True) -> CarbonForecast:
+    """Next-24h grid carbon forecast for a region, with the greenest upcoming
+    window — the basis for scheduling deferrable work to when the grid is clean."""
+    if use_cache and region in _forecast_cache:
+        return _forecast_cache[region]
+
+    result = None
+    zone = REGION_TO_ZONE.get(region)
+    if API_KEY and requests is not None and zone:
+        try:
+            resp = requests.get(
+                ELECTRICITY_MAPS_FORECAST_URL,
+                params={"zone": zone},
+                headers={"auth-token": API_KEY},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("forecast", [])
+            vals = [r["carbonIntensity"] for r in raw
+                    if r.get("carbonIntensity") is not None][:FORECAST_HOURS]
+            if len(vals) >= 4:
+                pts = [{"offset_h": i, "intensity": round(v)} for i, v in enumerate(vals)]
+                now_val = pts[0]["intensity"]
+                best = min(pts, key=lambda p: p["intensity"])
+                red = round((now_val - best["intensity"]) / now_val * 100) if now_val else 0
+                result = CarbonForecast(region, "live", now_val, pts,
+                                        best["offset_h"], best["intensity"], red)
+        except Exception:
+            result = None
+
+    if result is None:
+        result = _fallback_forecast(region)
+
+    if use_cache:
+        _forecast_cache[region] = result
+    return result
 
 
 # Fallback intraday swing when the history API isn't available — clearly labeled.
