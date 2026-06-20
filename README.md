@@ -36,6 +36,16 @@ fallback carbon + deterministic reasoning — unless you add keys; see below.)
 > (`ELECTRICITY_MAPS_API_KEY`, `GEMINI_API_KEY`) under the repo's
 > Settings → Secrets and variables → Codespaces, then rebuild.
 
+### Deploy a public link (Render — one service, one URL)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/TzeHern0703/ConstructSentry)
+
+One Docker service builds the dashboard and runs FastAPI, which serves both the
+UI and the API — so you get a single public URL anyone can open. Render reads
+`render.yaml`; add the two API keys as environment variables for live data
+(optional). Note: a public link shares one global state (anyone clicking
+*Attack* affects all viewers) — fine for a judged demo.
+
 ---
 
 ## What's real vs. simulated
@@ -269,10 +279,13 @@ The **dashboard** is a static Vite build and deploys cleanly to Vercel
 (`dashboard/` as the project root, build `npm run build`, output `dist`).
 
 The **backend** keeps mutable state (`cloud_state.json`), an in-memory SSE
-broker, and long-lived SSE connections, so it needs a **persistent process** —
-host it on Render / Railway / Fly.io (or run locally for the demo) rather than
-serverless. Point the dashboard at it by setting the Vite proxy target (or an
-API base URL) to the deployed backend.
+broker, a background monitor loop, and long-lived SSE connections, so it needs a
+**persistent process** — not serverless (so plain Vercel won't host it). The
+easiest path is the included **Docker + `render.yaml`**: one service builds the
+dashboard and runs FastAPI, which serves both the UI and the API at one URL
+(see the *Deploy to Render* button above). The same Docker image runs on
+Railway / Fly.io / any container host. For local dev, use the two-process setup
+below (Vite proxies `/api` to uvicorn).
 
 ---
 

@@ -558,9 +558,17 @@ async def stream():
     )
 
 
-@app.get("/")
-def root():
-    return {"service": "ConstructSentry API", "endpoints": [
-        "/api/state", "/api/findings", "/api/summary",
-        "/api/scan", "/api/attack", "/api/remediate", "/api/stream", "/api/reset",
-    ]}
+@app.get("/healthz")
+def healthz():
+    return {"service": "ConstructSentry API", "ok": True}
+
+
+# Serve the built dashboard at "/" when present (production / Render), so one
+# service hosts both the API and the UI. Mounted LAST so /api routes win. In
+# local dev the dist folder doesn't exist — use the Vite dev server instead.
+import os as _os
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_DIST = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "dashboard", "dist")
+if _os.path.isdir(_DIST):
+    app.mount("/", _StaticFiles(directory=_DIST, html=True), name="dashboard")

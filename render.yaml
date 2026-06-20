@@ -1,0 +1,17 @@
+# Render Blueprint — one-click full-stack deploy (FastAPI + built dashboard).
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: constructsentry
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      # Optional — set these in the Render dashboard for live data. Without them
+      # the app runs in offline mode (fallback carbon + deterministic reasoning).
+      - key: ELECTRICITY_MAPS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
