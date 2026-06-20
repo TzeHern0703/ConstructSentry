@@ -11,6 +11,7 @@ import {
 import { moodColor } from "./theme";
 import SummaryRow from "./components/SummaryRow";
 import ServerGrid from "./components/ServerGrid";
+import RoutingMap from "./components/RoutingMap";
 import CarbonChart from "./components/CarbonChart";
 import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
@@ -31,6 +32,7 @@ export default function App() {
   // HEALED is a transient frontend-only state shown right after remediation.
   const [healReport, setHealReport] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [view, setView] = useState("fleet"); // "fleet" | "map"
 
   // Poll summary + state every 2s (FRONTEND_SPEC Section 3).
   useEffect(() => {
@@ -154,7 +156,25 @@ export default function App() {
         {/* LEFT 60% */}
         <section className="flex flex-col gap-4 lg:col-span-3">
           <SummaryRow summary={summary} />
-          <ServerGrid servers={state?.servers} />
+          <div>
+            <div className="mb-2 flex gap-1">
+              {["fleet", "map"].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className="meta border px-2 py-1 transition-colors"
+                  style={
+                    view === v
+                      ? { color: "var(--color-ink)", borderColor: "var(--color-ink)" }
+                      : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.12)" }
+                  }
+                >
+                  {v === "fleet" ? "Fleet" : "Carbon Map"}
+                </button>
+              ))}
+            </div>
+            {view === "fleet" ? <ServerGrid servers={state?.servers} /> : <RoutingMap />}
+          </div>
           <CarbonChart data={carbonHistory} status={status} />
         </section>
 

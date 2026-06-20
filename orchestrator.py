@@ -77,82 +77,111 @@ def _baseline_carbon(server):
     return tools.compute_server_carbon(clone)
 
 
-def _recommend(category, server, carbon, finding_types, metrics):
-    """Return (action, savings_usd, carbon_prevented_kg, wins[])."""
+# Savings recovered by each lifecycle action, as a fraction of the server's
+# full cost / carbon.
+HIBERNATE_COST_RECOVERY = 0.85    # storage volume is still billed
+HIBERNATE_CARBON_RECOVERY = 0.95  # only the idle disk still draws power
+
+ACTION_LABEL = {
+    "terminate": "Terminate",
+    "hibernate": "Hibernate",
+    "right_size": "Right-size",
+    "route": "Relocate",
+    "time_shift": "Time-shift",
+    "isolate_restore": "Isolate & restore",
+    "harden": "Harden config",
+}
+
+
+def _lifecycle_options(server, carbon):
+    """Terminate vs Hibernate options for an idle/unneeded server — the choice
+    changes the savings, so it's surfaced for the user to toggle."""
+    sid = server["id"]
     cost = carbon["monthly_cost_usd"]
     co2 = carbon["carbon_kg"]
-    wins = []
+    return [
+        {
+            "type": "terminate", "label": "Terminate",
+            "savings_usd": cost, "carbon_kg": round(co2, 1),
+            "action": f"Terminate {sid} — delete the instance and its volumes "
+                      f"(it isn't needed again).",
+        },
+        {
+            "type": "hibernate", "label": "Hibernate",
+            "savings_usd": int(round(cost * HIBERNATE_COST_RECOVERY)),
+            "carbon_kg": round(co2 * HIBERNATE_CARBON_RECOVERY, 1),
+            "action": f"Hibernate {sid} — stop compute, keep the disk so it can "
+                      f"wake on demand (small storage cost remains).",
+        },
+    ]
+
+
+def _wins(security_line, savings_usd, carbon_kg):
+    cost_line = f"Cost: ~${savings_usd:,}/mo saved" if savings_usd else "Cost: no change"
+    carbon_line = f"Carbon: ~{carbon_kg} kg CO2e/mo cut" if carbon_kg else "Carbon: no change"
+    return [security_line, cost_line, carbon_line]
+
+
+def _recommend(category, server, carbon, finding_types, metrics):
+    """Return (action, savings_usd, carbon_kg, wins, action_type, action_options).
+
+    `action_type` is the recommended lifecycle action for this workload;
+    `action_options` lists togglable alternatives (terminate vs hibernate) whose
+    numbers differ, so the user can see which choice changes the result.
+    """
+    cost = carbon["monthly_cost_usd"]
+    co2 = carbon["carbon_kg"]
 
     if category == "compromised_host":
-        # Legit asset hijacked for mining: isolate + restore, don't delete.
-        # Carbon prevented = the extra emissions above the host's normal baseline.
         baseline = _baseline_carbon(server)
         prevented = round(max(co2 - baseline["carbon_kg"], 0.0), 1)
-        action = (
-            "Isolate the host, kill unauthorized processes, and rotate "
-            "credentials. Restore it to its legitimate workload."
-        )
+        action = ("Isolate the host, kill unauthorized processes, rotate "
+                  "credentials, and restore its legitimate workload.")
         wins = [
             "Security: active breach contained, blueprint/asset data protected",
             f"Cost: ${cost:,}/mo of hijacked compute reclaimed for real work",
             f"Carbon: ~{prevented} kg CO2e/mo of zombie-mining emissions stopped",
         ]
-        return action, cost, prevented, wins
-
-    if category == "orphaned_access":
-        # Subcontractor gone but server live: shut it down entirely.
-        action = (
-            f"Decommission this server — its owner's contract is inactive. "
-            f"Revoke access and stop the instance."
-        )
-        wins = [
-            "Security: orphaned access path eliminated",
-            f"Cost: ${cost:,}/mo saved (instance no longer billed)",
-            f"Carbon: ~{co2} kg CO2e/mo eliminated (instance powered off)",
-        ]
-        return action, cost, co2, wins
+        return action, cost, prevented, wins, "isolate_restore", []
 
     if category == "exposed_risk":
-        # Harden config; no compute is shut down, so no direct $/carbon savings.
         fixes = []
-        if "EXPOSED_SSH" in finding_types:
-            fixes.append("close port 22 / restrict SSH")
-        if "NO_ENCRYPTION" in finding_types:
-            fixes.append("enable encryption at rest")
-        if "WILDCARD_IAM" in finding_types:
-            fixes.append("scope down IAM")
-        if "NO_MFA" in finding_types:
-            fixes.append("enforce MFA")
-        if "STALE_CREDENTIALS" in finding_types:
-            fixes.append("rotate credentials")
+        if "EXPOSED_SSH" in finding_types: fixes.append("close port 22 / restrict SSH")
+        if "NO_ENCRYPTION" in finding_types: fixes.append("enable encryption at rest")
+        if "WILDCARD_IAM" in finding_types: fixes.append("scope down IAM")
+        if "NO_MFA" in finding_types: fixes.append("enforce MFA")
+        if "STALE_CREDENTIALS" in finding_types: fixes.append("rotate credentials")
         action = "Harden configuration: " + ", ".join(fixes) + "."
-        wins = [
-            "Security: attack surface reduced before it can be exploited",
-            "Cost: no change (server stays in service)",
-            "Carbon: no change",
-        ]
-        return action, 0, 0.0, wins
+        wins = ["Security: attack surface reduced before it can be exploited",
+                "Cost: no change (server stays in service)", "Carbon: no change"]
+        return action, 0, 0.0, wins, "harden", []
+
+    if category == "orphaned_access":
+        # Owner contract ended -> default Terminate; Hibernate offered as toggle.
+        opts = _lifecycle_options(server, carbon)
+        chosen = opts[0]  # terminate
+        wins = _wins("Security: orphaned access path eliminated",
+                     chosen["savings_usd"], chosen["carbon_kg"])
+        return chosen["action"], chosen["savings_usd"], chosen["carbon_kg"], wins, "terminate", opts
 
     # pure_waste
     if "ZOMBIE" in finding_types:
-        action = "Decommission this zombie instance — it does no useful work."
-        wins = [
-            "Security: smaller footprint",
-            f"Cost: ${cost:,}/mo saved (instance powered off)",
-            f"Carbon: ~{co2} kg CO2e/mo eliminated",
-        ]
-        return action, cost, co2, wins
+        opts = _lifecycle_options(server, carbon)
+        # Still contracted AND has a scheduled task => it'll be used again =>
+        # Hibernate; otherwise Terminate. Both numbers offered for toggling.
+        reusable = server.get("subcontractor_contract_active") and bool(server.get("scheduled_tasks"))
+        default = "hibernate" if reusable else "terminate"
+        chosen = next(o for o in opts if o["type"] == default)
+        wins = _wins("Security: smaller footprint",
+                     chosen["savings_usd"], chosen["carbon_kg"])
+        return chosen["action"], chosen["savings_usd"], chosen["carbon_kg"], wins, default, opts
 
     if "OVER_PROVISIONED" in finding_types:
         saved_usd = int(round(cost * RIGHTSIZE_RECOVERY))
         saved_co2 = round(co2 * RIGHTSIZE_RECOVERY, 1)
-        action = "Right-size to a smaller instance matched to actual utilization."
-        wins = [
-            "Security: no change",
-            f"Cost: ~${saved_usd:,}/mo saved by right-sizing",
-            f"Carbon: ~{saved_co2} kg CO2e/mo cut",
-        ]
-        return action, saved_usd, saved_co2, wins
+        action = f"Right-size {server['id']} to a smaller instance matched to actual utilization."
+        wins = _wins("Security: no change", saved_usd, saved_co2)
+        return action, saved_usd, saved_co2, wins, "right_size", []
 
     # Greening a deferrable workload (GOOD_CARBON / HIGH_CARBON_REGION):
     # relocate vs time-shift, decided transit- and sovereignty-aware upstream.
@@ -160,25 +189,22 @@ def _recommend(category, server, carbon, finding_types, metrics):
     relocate_to = metrics.get("relocate_to", "a greener region")
     transit_kg = metrics.get("transit_kg", 0)
     if metrics.get("plan") == "relocate":
-        action = (
-            f"Relocate to {relocate_to} — net carbon win after the one-time "
-            f"~{transit_kg} kg data-transit cost."
-        )
+        action = (f"Relocate to {relocate_to} — net carbon win after the one-time "
+                  f"~{transit_kg} kg data-transit cost.")
         carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo net (after {transit_kg} kg transit)"
+        action_type = "route"
     elif metrics.get("residency_locked"):
-        action = (
-            f"Data residency-locked to {metrics.get('residency')}: cannot move "
-            f"cross-border. Time-shift to the grid's greenest hours in-region."
-        )
+        action = (f"Data residency-locked to {metrics.get('residency')}: cannot move "
+                  f"cross-border. Time-shift to the grid's greenest hours in-region.")
         carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift (no data moved)"
+        action_type = "time_shift"
     else:
-        action = (
-            "Transit carbon would cancel the relocation gain — time-shift to "
-            "greener hours in-region instead."
-        )
+        action = ("Transit carbon would cancel the relocation gain — time-shift to "
+                  "greener hours in-region instead.")
         carbon_win = f"Carbon: ~{saved_co2} kg CO2e/mo via time-shift"
+        action_type = "time_shift"
     wins = ["Security: no change", "Cost: ~$0/mo (same compute)", carbon_win]
-    return action, 0, saved_co2, wins
+    return action, 0, saved_co2, wins, action_type, []
 
 
 def correlate(state, cyber_result, carbon_result, emit=None):
@@ -214,7 +240,7 @@ def correlate(state, cyber_result, carbon_result, emit=None):
             metrics.update(f.get("metrics", {}))
 
         carbon_nums = tools.compute_server_carbon(server)
-        action, saved_usd, prevented_kg, wins = _recommend(
+        action, saved_usd, prevented_kg, wins, action_type, action_options = _recommend(
             category, server, carbon_nums, finding_types, metrics
         )
 
@@ -239,6 +265,9 @@ def correlate(state, cyber_result, carbon_result, emit=None):
             "finding_types": sorted(finding_types),
             "carbon": carbon_nums,
             "action": action,
+            "action_type": action_type,
+            "action_label": ACTION_LABEL.get(action_type, action_type),
+            "action_options": action_options,
             "monthly_savings_usd": saved_usd,
             "carbon_prevented_kg": prevented_kg,
             "wins": wins,

@@ -1,9 +1,20 @@
+import { useState } from "react";
 import { severityColor } from "../theme";
 
-// Correlated incidents, ranked by severity (FRONTEND_SPEC component 6). Each
-// card shows the compound finding (security + carbon) and the unified
-// recommendation with numbers. Compound incidents get an explicit
-// "🔗 SECURITY + CARBON" badge — the whole "1 fix = 3 wins" pitch.
+const ACTION_COLOR = {
+  Terminate: "#FF2D2D",
+  Hibernate: "#5BA8FF",
+  "Right-size": "#E0A106",
+  Relocate: "#1FB57A",
+  "Time-shift": "#1FB57A",
+  "Isolate & restore": "#C77DFF",
+  "Harden config": "#9aa0aa",
+};
+
+// Correlated incidents, ranked. Each card shows the compound finding, the
+// recommended lifecycle ACTION per workload (terminate / hibernate / right-size
+// / route …), and — where the choice changes the result — a toggle so you can
+// switch terminate↔hibernate and watch the savings update.
 export default function IncidentList({ incidents, report }) {
   return (
     <div className="flex flex-1 flex-col border border-white/10 bg-[var(--color-panel)]">
@@ -29,38 +40,62 @@ export default function IncidentList({ incidents, report }) {
 
 function IncidentCard({ inc }) {
   const color = severityColor(inc.severity);
-  const savings = inc.monthly_savings_usd;
-  const carbon = inc.carbon_prevented_kg;
+  const options = inc.action_options ?? [];
+  const [optIdx, setOptIdx] = useState(0);
+
+  // When toggling terminate↔hibernate, show that option's numbers/action.
+  const chosen = options[optIdx];
+  const savings = chosen ? chosen.savings_usd : inc.monthly_savings_usd;
+  const carbon = chosen ? chosen.carbon_kg : inc.carbon_prevented_kg;
+  const action = chosen ? chosen.action : inc.action;
+  const actionLabel = chosen ? chosen.label : inc.action_label;
+  const actionColor = ACTION_COLOR[actionLabel] || "#9aa0aa";
 
   return (
-    <div
-      className="border-l-2 bg-black/30 p-3"
-      style={{ borderColor: color }}
-    >
+    <div className="border-l-2 bg-black/30 p-3" style={{ borderColor: color }}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-display text-sm font-bold">{inc.server_id}</span>
-        <span className="meta" style={{ color }}>
-          {inc.category_label}
-        </span>
+        <span className="meta" style={{ color }}>{inc.category_label}</span>
         {inc.is_compound && (
           <span className="meta bg-[var(--color-critical)] px-1.5 py-0.5 font-bold text-black">
             🔗 SECURITY + CARBON
           </span>
         )}
+        {/* recommended action chip */}
+        <span
+          className="meta ml-auto border px-1.5 py-0.5 font-bold"
+          style={{ color: actionColor, borderColor: actionColor }}
+        >
+          {actionLabel}
+        </span>
       </div>
 
-      <p className="mt-2 text-xs leading-snug text-[var(--color-ink)]/85">
-        {inc.action}
-      </p>
+      <p className="mt-2 text-xs leading-snug text-[var(--color-ink)]/85">{action}</p>
+
+      {/* terminate ↔ hibernate toggle (only when options exist) */}
+      {options.length > 1 && (
+        <div className="mt-2 flex gap-1">
+          {options.map((o, i) => (
+            <button
+              key={o.type}
+              onClick={() => setOptIdx(i)}
+              className="meta border px-2 py-1 transition-colors"
+              style={
+                i === optIdx
+                  ? { background: ACTION_COLOR[o.label], color: "#000", borderColor: ACTION_COLOR[o.label] }
+                  : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.15)" }
+              }
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {(savings > 0 || carbon > 0) && (
         <div className="mt-2 flex gap-4">
-          {savings > 0 && (
-            <Metric value={`$${savings.toLocaleString()}/mo`} label="saved" />
-          )}
-          {carbon > 0 && (
-            <Metric value={`${carbon} kg`} label="CO2e prevented" />
-          )}
+          {savings > 0 && <Metric value={`$${savings.toLocaleString()}/mo`} label="saved" />}
+          {carbon > 0 && <Metric value={`${carbon} kg`} label="CO2e prevented" />}
         </div>
       )}
     </div>

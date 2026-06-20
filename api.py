@@ -195,6 +195,37 @@ def get_findings():
     return _findings_payload(_ensure())
 
 
+@app.get("/api/regions")
+def get_regions():
+    """Per-region carbon intensity + the servers running there — for the
+    workload-routing visualization. Sorted cleanest-grid first."""
+    from carbon_data import get_carbon_intensity
+
+    state = state_store.load_state()
+    regions: dict[str, dict] = {}
+    for s in state["servers"]:
+        r = s["region"]
+        if r not in regions:
+            ci = get_carbon_intensity(r)
+            regions[r] = {
+                "region": r,
+                "intensity": ci.gco2_per_kwh,
+                "source": ci.source,
+                "is_dirty": ci.is_dirty,
+                "is_clean": ci.is_clean,
+                "servers": [],
+            }
+        regions[r]["servers"].append({
+            "id": s["id"],
+            "cpu": s["cpu_utilization"],
+            "status": s["status"],
+            "residency_locked": s.get("data_residency", "none") not in (None, "none", ""),
+        })
+    ordered = sorted(regions.values(), key=lambda x: x["intensity"])
+    greenest = ordered[0]["region"] if ordered else None
+    return {"regions": ordered, "greenest": greenest}
+
+
 @app.get("/api/summary")
 def get_summary():
     """Totals: security score, total carbon, total cost, # critical, status."""

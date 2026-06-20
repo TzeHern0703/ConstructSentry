@@ -16,6 +16,7 @@ async function jpost(path) {
 export const getSummary = () => jget("/api/summary");
 export const getState = () => jget("/api/state");
 export const getFindings = () => jget("/api/findings");
+export const getRegions = () => jget("/api/regions");
 
 export const runScan = () => jpost("/api/scan");
 export const runAttack = () => jpost("/api/attack");
