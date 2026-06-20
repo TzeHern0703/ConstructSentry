@@ -7,6 +7,8 @@ export default function SummaryRow({ summary }) {
   if (!summary) return <div className="h-28" />;
 
   const secColor = summary.security_score < 70 ? CRITICAL : HEALTHY;
+  const wasted = summary.recoverable_usd ?? 0;
+  const totalK = ((summary.total_cost_usd ?? 0) / 1000).toFixed(1);
 
   return (
     <div className="grid grid-cols-3 gap-3">
@@ -22,16 +24,17 @@ export default function SummaryRow({ summary }) {
         color={HEALTHY}
       />
       <Stat
-        label="Monthly Cost"
+        label="Wasted spend · recoverable/mo"
+        sub={`of $${totalK}k cloud spend`}
         prefix="$"
-        value={summary.total_cost_usd}
-        color="var(--color-ink)"
+        value={wasted}
+        color={wasted > 0 ? "#E0A106" : HEALTHY}
       />
     </div>
   );
 }
 
-function Stat({ label, value, prefix = "", suffix = "", color }) {
+function Stat({ label, value, prefix = "", suffix = "", sub, color }) {
   return (
     <div className="border border-white/10 bg-[var(--color-panel)] px-4 py-3 transition-colors">
       <div
@@ -43,6 +46,7 @@ function Stat({ label, value, prefix = "", suffix = "", color }) {
         <span className="text-xl opacity-60">{suffix}</span>
       </div>
       <div className="meta mt-2">{label}</div>
+      {sub && <div className="meta mt-0.5 opacity-60">{sub}</div>}
     </div>
   );
 }

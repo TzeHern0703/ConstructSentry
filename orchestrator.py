@@ -348,6 +348,10 @@ def summarize(state, results):
         "security_score": security_score,
         "total_carbon_kg": results["carbon"]["totals"]["total_carbon_kg"],
         "total_cost_usd": total_cost,
+        # The actionable money number: spend you can reclaim by acting on the
+        # incidents (zombie shutdown + right-sizing + compromised-host recovery).
+        "recoverable_usd": report["total_monthly_savings_usd"],
+        "recoverable_carbon_kg": report["total_carbon_prevented_kg"],
         "critical_count": report["critical_count"],
         "compound_count": report["compound_count"],
         "system_status": report["system_status"],
