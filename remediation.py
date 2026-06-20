@@ -49,11 +49,46 @@ def _legit_utilization(nominal):
     return max(0, round(nominal * random.uniform(0.8, 1.2)))
 
 
+def _snapshot(srv, carbon):
+    """Capture the host fields a viewer cares about, for before/after display."""
+    return {
+        "cpu": srv.get("cpu_utilization"),
+        "gpu": srv.get("gpu_utilization"),
+        "failed_logins": srv.get("failed_login_attempts_last_hour"),
+        "ssh_exposed": srv.get("ssh_exposed"),
+        "open_ports": list(srv.get("open_ports", [])),
+        "status": srv.get("status"),
+        "carbon_kg": carbon["carbon_kg"],
+    }
+
+
+# Human-readable label per response action.
+STEP_LABEL = {
+    "isolate": "Network-isolate host",
+    "kill_process": "Terminate unauthorized process",
+    "rotate_credentials": "Rotate credentials & revoke sessions",
+}
+
+
+def _step_detail(step, b, a):
+    """One-line concrete effect of a step, from before/after snapshots."""
+    if step == "isolate":
+        return f"SSH {b['ssh_exposed']}→{a['ssh_exposed']}, ports {b['open_ports']}→{a['open_ports']}"
+    if step == "kill_process":
+        return f"CPU {b['cpu']}%→{a['cpu']}%, GPU {b['gpu']}%→{a['gpu']}%"
+    if step == "rotate_credentials":
+        return f"Failed logins {b['failed_logins']}→{a['failed_logins']}"
+    return ""
+
+
 def _apply_step(step, srv, baseline_srv):
     """Apply one response action by restoring the fields it governs."""
     if step == "isolate":
-        srv["ssh_exposed"] = baseline_srv["ssh_exposed"]
-        srv["open_ports"] = list(baseline_srv["open_ports"])
+        # Network-isolate a compromised host: actively CLOSE SSH / port 22 (cut
+        # the attacker's path) — not "restore baseline", which may itself have
+        # been exposed.
+        srv["ssh_exposed"] = False
+        srv["open_ports"] = [p for p in srv.get("open_ports", []) if p != 22]
     elif step == "kill_process":
         # Killing the mining daemon frees the compute; the server then settles
         # back into its LEGITIMATE workload's operating range (config restored,
@@ -83,6 +118,7 @@ def remediate(emit=None, target_id=TARGET_ID, steps=None):
             raise ValueError(f"target server '{target_id}' not found")
 
         before = tools.compute_server_carbon(srv)
+        host_before = _snapshot(srv, before)
         cost = srv.get("monthly_cost_usd", 0)
         baseline = load_baseline()
         bsrv = get_server(baseline, target_id)
@@ -95,6 +131,7 @@ def remediate(emit=None, target_id=TARGET_ID, steps=None):
 
         save_state(state)
         after = tools.compute_server_carbon(srv)
+        host_after = _snapshot(srv, after)
 
         # VERIFY — re-scan the target instead of asserting success.
         _emit(emit, "act", f"Re-scanning {target_id} to verify remediation.")
@@ -106,6 +143,20 @@ def remediate(emit=None, target_id=TARGET_ID, steps=None):
     verified = not residual_critical
 
     carbon_prevented = round(before["carbon_kg"] - after["carbon_kg"], 1)
+
+    # Per-step action log with concrete effects, for the remediation timeline.
+    actions = [
+        {"step": step, "label": STEP_LABEL.get(step, step),
+         "detail": _step_detail(step, host_before, host_after)}
+        for step in steps
+    ]
+    actions.append({
+        "step": "verify",
+        "label": "Re-scan & verify",
+        "detail": ("PASSED — host clean, no critical findings" if verified
+                   else "FAILED — " + ", ".join(f["type"] for f in residual_critical)),
+        "ok": verified,
+    })
 
     if verified:
         headline = (
@@ -132,6 +183,9 @@ def remediate(emit=None, target_id=TARGET_ID, steps=None):
     return {
         "target": target_id,
         "steps_applied": steps,
+        "actions": actions,
+        "host_before": host_before,
+        "host_after": host_after,
         "verified": verified,
         "residual_critical": [f["type"] for f in residual_critical],
         "before": before,

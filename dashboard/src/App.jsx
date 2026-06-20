@@ -15,11 +15,11 @@ import CarbonChart from "./components/CarbonChart";
 import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
 import IncidentList from "./components/IncidentList";
-import FinalReport from "./components/FinalReport";
+import RemediationModal from "./components/RemediationModal";
 import ReportModal from "./components/ReportModal";
 
 const MAX_POINTS = 45;
-const HEALED_WINDOW_MS = 8000;
+const HEALED_WINDOW_MS = 14000;
 
 export default function App() {
   const [summary, setSummary] = useState(null);
@@ -142,7 +142,7 @@ export default function App() {
         </p>
       )}
 
-      <FinalReport report={healReport} onClose={() => setHealReport(null)} />
+      <RemediationModal report={healReport} onClose={() => setHealReport(null)} />
       <ReportModal
         open={reportOpen}
         onClose={() => setReportOpen(false)}
