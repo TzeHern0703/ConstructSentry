@@ -204,6 +204,13 @@ The **Efficiency tab** ranks workloads by emissions and flags each as
 carbon-intensive / inefficient / efficient with the *why* (oversized instance,
 dirty grid, replicas, near-idle, cooling) + utilization + carbon wasted on idle.
 
+**LLM action plan (the LLM decides).** On each scan the LLM ranks the incidents
+("fix this first, because…") by risk then ROI — shown in the **AI Report**
+("Recommended action plan") and streamed as a line into the live feed. The LLM
+provider is whichever key is set: **Grafilab** (`GRAFILAB_API_KEY`,
+OpenAI-compatible) > Claude > Gemini > offline. Detection/maths stay
+deterministic; the LLM only does judgment.
+
 ```bash
 curl -s -X POST "http://localhost:5173/api/autopilot?on=true"      # enable autonomy
 curl -s    "http://localhost:5173/api/carbon"                       # per-workload efficiency

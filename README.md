@@ -37,9 +37,9 @@ re-scanning** rather than assumed.
 - ✅ **Real** carbon data — the [Electricity Maps](https://www.electricitymaps.com/)
   API (live grid intensity *and* last-24h history for green scheduling), with a
   labeled fallback table when no key is present.
-- ✅ **Real** agent reasoning (Claude / Gemini), surfaced in the dashboard's
-  **AI Analysis** panel — with a deterministic fallback so the demo always runs
-  offline.
+- ✅ **Real** agent reasoning (Grafilab Neo Cloud / Claude / Gemini), surfaced in
+  the **AI Report** (analysis + a prioritized action plan) — with a deterministic
+  fallback so the demo always runs offline.
 - ✅ **Real** continuous monitoring (background re-scan) and **verified**
   remediation (re-scan to confirm the fix worked).
 - 🧪 **Simulated** environment (`cloud_state.json`) and **simulated, local-only**
@@ -108,8 +108,14 @@ Things that are easy to get wrong in a PoC and how this project handles them:
   it catches a change even if no one clicks anything.
 - **Deterministic detection, LLM judgment.** Detection rules (`tools.py`) are
   pure and reproducible *on purpose* — you don't want an LLM guessing whether
-  port 22 is open. The LLM (Claude/Gemini) does the judgment layer: ranking,
-  good-carbon-vs-bad-carbon, and the plain-language analysis shown in the UI.
+  port 22 is open. The LLM (Grafilab / Claude / Gemini, behind one `call_llm`)
+  does the judgment layer: ranking, good-carbon-vs-bad-carbon, and the
+  plain-language analysis shown in the UI.
+- **LLM makes the call (not just narration).** On each scan the LLM produces a
+  **prioritized action plan** — which incident to fix first and *why*, ordered by
+  real risk (active compromise > orphaned access > exposed > waste) then ROI.
+  It's shown in the AI Report and streamed as a line into the live feed, so the
+  LLM is a decision-maker in the loop, not a caption.
 - **Realistic carbon physics.** Power uses the non-linear Fan et al. (Google)
   server model, not a straight line, and applies a **load-dependent regional
   PUE** (datacenter cooling) — so the same workload emits more in hot Singapore
