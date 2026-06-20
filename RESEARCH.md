@@ -173,6 +173,38 @@ changes and any region edits show up automatically.
 
 ---
 
+## 4c. Carbon-aware autoscaling, Autopilot & heal approval
+
+Scalable workloads carry extra fields (edit them to experiment):
+
+| Field | Meaning | Effect |
+|---|---|---|
+| `replicas` | running replica count | carbon & cost scale with it |
+| `latency_p95_ms` | current p95 latency | drives scale up/down |
+| `latency_slo_ms` | latency target | the benchmark to hold |
+
+The agent keeps the **fewest replicas that meet the SLO**:
+- low latency + headroom → **Scale down** (carbon waste) ·
+  high latency > SLO → **Scale up** (capacity to hold the SLO).
+- `target = ceil(latency × replicas / slo)`; latency scales inversely with
+  replicas. See it in the **Scaling** tab (latency-vs-SLO bars).
+
+**Two operating modes:**
+- **Manual / human-in-the-loop** — click **Heal** and the agent lists the
+  discovered problems + proposed steps and asks you to **Approve** before acting.
+  Scale/Terminate/Hibernate have one-click **Apply** on the incident card.
+- **Autopilot** (control-bar toggle) — the agent acts autonomously every sweep:
+  scales to the SLO *and* auto-heals a compromised host (isolate→kill→rotate→
+  verify), streaming `🤖 Autopilot …` to the feed. A live traffic wave makes
+  latency fluctuate so there's always something to track.
+
+```bash
+curl -s -X POST "http://localhost:5173/api/autopilot?on=true"     # enable autonomy
+curl -s -X POST "http://localhost:5173/api/action?server_id=fieldwire-api-prod&type=scale_down"
+```
+
+---
+
 ## 5. How to check a change took effect
 
 1. **Dashboard** — wait ~6 s; numbers, server cards, incidents update on their
@@ -222,6 +254,17 @@ Edit `cloud_state.json`, save, wait ~6 s, observe. (Server names are the `id`.)
    (numbers differ), then **Apply**: terminate drops the fleet 10→9 and wasted
    spend $4,110→$2,870; reset and instead **Hibernate** `bim-archive-render-02`
    to watch total carbon fall ~1790→~1090 kg (it's the biggest emitter).
+
+8. **Autopilot autonomy (agent acts on its own)**
+   Toggle **Autopilot ON**, then **Simulate Attack** and don't touch anything:
+   within a couple of sweeps the agent auto-scales workloads to their SLO *and*
+   auto-heals the compromised host (watch the `🤖 Autopilot …` feed + the
+   "what was solved" card). Turn it off to return to approve-before-heal.
+
+9. **Latency / scaling (raise load by hand)**
+   Bump `latency_p95_ms` on `fieldwire-api-prod` above its `latency_slo_ms`
+   (200) → the **Scaling** tab flips it red with a "scale up" arrow and a
+   SCALE_UP incident appears; lower it well under the SLO → "scale down".
 
 ---
 

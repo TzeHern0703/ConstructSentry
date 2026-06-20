@@ -113,6 +113,19 @@ Things that are easy to get wrong in a PoC and how this project handles them:
   and refuses cross-border moves for **residency-locked** blueprint data —
   time-shifting in-region instead. The time-shift saving is computed from each
   grid's **real last-24h swing** (Electricity Maps history), not a constant.
+- **Carbon-aware autoscaling (carbon = ops, not a side report).** Servers carry
+  p95 latency, a latency SLO and replica count; carbon/cost scale with replicas.
+  The agent keeps the *fewest* replicas that still meet the SLO — too many is
+  carbon+cost waste (scale down), a latency breach needs capacity (scale up). So
+  carbon is minimized *subject to* the performance SLO — the integration most
+  PoCs miss.
+- **Autonomous agent (Autopilot) vs human-in-the-loop.** A live traffic wave
+  makes latency fluctuate; with **Autopilot ON** the agent acts on its own each
+  sweep — scaling to the SLO *and* auto-healing a compromised host (isolate →
+  kill → rotate → verify), streaming "🤖 Autopilot …" to the feed, no clicks.
+  With Autopilot OFF, **Heal is human-in-the-loop**: the agent lists the problems
+  it found and the remediation it proposes, and asks the operator to **approve**
+  before executing — like a real SOC runbook, not a silent auto-fix.
 - **Per-workload lifecycle actions (not one-size-fits-all "shut down").** The
   orchestrator recommends the *right* action per server — **terminate** (gone
   for good), **hibernate** (stop compute, keep disk, wake on demand),
@@ -192,11 +205,15 @@ server proxies `/api` to the backend on `:8000`.
    re-scanned to **verify** → **HEALED**: carbon drops, status returns to green,
    and a verified savings report slides in.
 
+Or flip **Autopilot ON** and just watch: the agent autonomously scales workloads
+to their SLO and auto-heals the attack — no clicks. With Autopilot off, **Heal**
+opens an approval plan (discovered problems + proposed steps) you confirm first.
+
 Throughout, the **Agent Reasoning** feed streams live Reason→Act→Observe steps
-(including the monitor's heartbeat). Toggle the left panel to **Carbon Map** to
-see workloads by grid intensity; on an incident, switch **Terminate ↔ Hibernate**
-and hit **Apply** to execute it; and **AI Report** exports the full LLM analysis
-as Markdown.
+(including the monitor's heartbeat and 🤖 Autopilot actions). The left panel
+toggles **Fleet / Carbon Map / Scaling** (latency-vs-SLO benchmark); on an
+incident, switch **Terminate ↔ Hibernate** or **Scale ↓/↑** and hit **Apply**;
+and **AI Report** exports the full LLM analysis as Markdown.
 
 ---
 
