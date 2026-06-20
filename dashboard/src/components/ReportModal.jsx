@@ -122,6 +122,21 @@ export default function ReportModal({ open, onClose, summary, findings }) {
             </div>
           </div>
 
+          {/* business view — why it matters, where the value is */}
+          <BusinessImpact report={report} />
+          <Section title="Why this matters (business)" color="var(--color-ink)">
+            <ul className="space-y-1">
+              <li>🔒 <b>Blueprint &amp; asset IP protected</b> — a compromised host exposes
+                project data; correlating it with carbon catches it faster.</li>
+              <li>📑 <b>Subcontractor governance</b> — orphaned access from ended
+                contracts is a compliance + audit risk, closed automatically.</li>
+              <li>💰 <b>Project-cloud margin</b> — recovered spend drops straight to
+                the project's bottom line.</li>
+              <li>🌱 <b>ESG / sustainability reporting</b> — verifiable CO₂e cuts with
+                live grid data, defensible in a sustainability audit.</li>
+            </ul>
+          </Section>
+
           <p className="meta">
             Simulated construction-cloud environment · detection logic &amp; carbon
             data are real · attack is a local simulation.
@@ -129,6 +144,25 @@ export default function ReportModal({ open, onClose, summary, findings }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function BusinessImpact({ report }) {
+  const annualUsd = (report.total_monthly_savings_usd ?? 0) * 12;
+  const annualKg = (report.total_carbon_prevented_kg ?? 0) * 12;
+  const trees = Math.round(annualKg / 21); // a mature tree absorbs ~21 kg CO₂/yr
+  const kmDriven = Math.round(annualKg * 6); // ~6 km per kg CO₂ (avg car)
+  return (
+    <Section title="Business impact (annualized)" color="var(--color-healthy)">
+      <div className="grid grid-cols-3 gap-3">
+        <Snap label="saved / year" value={`$${annualUsd.toLocaleString()}`} />
+        <Snap label="CO₂e / year" value={`${annualKg.toLocaleString()} kg`} />
+        <Snap label="≈ trees planted" value={trees.toLocaleString()} />
+      </div>
+      <p className="meta mt-2 normal-case tracking-normal text-[var(--color-ink)]/60">
+        Carbon cut ≈ taking {kmDriven.toLocaleString()} km of driving off the road per year.
+      </p>
+    </Section>
   );
 }
 
@@ -209,6 +243,13 @@ function buildMarkdown({ summary, findings, ts }) {
   L.push("## Potential impact");
   L.push(`- $${(r.total_monthly_savings_usd ?? 0).toLocaleString()}/mo recoverable`);
   L.push(`- ${r.total_carbon_prevented_kg ?? 0} kg CO2e/mo recoverable`);
+  L.push("");
+  const annUsd = (r.total_monthly_savings_usd ?? 0) * 12;
+  const annKg = (r.total_carbon_prevented_kg ?? 0) * 12;
+  L.push("## Business impact (annualized)");
+  L.push(`- $${annUsd.toLocaleString()}/year saved`);
+  L.push(`- ${annKg.toLocaleString()} kg CO2e/year (~${Math.round(annKg / 21)} trees, ~${Math.round(annKg * 6).toLocaleString()} km driving)`);
+  L.push("- Blueprint/asset IP protected · subcontractor access governance · project-cloud margin · ESG reporting");
   L.push("");
   L.push("---");
   L.push("Simulated construction-cloud environment · detection logic & carbon data are real · attack is a local simulation.");
