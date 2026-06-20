@@ -13,6 +13,7 @@ import { moodColor } from "./theme";
 import SummaryRow from "./components/SummaryRow";
 import ServerGrid from "./components/ServerGrid";
 import RoutingMap from "./components/RoutingMap";
+import ScalingBench from "./components/ScalingBench";
 import CarbonChart from "./components/CarbonChart";
 import ControlBar from "./components/ControlBar";
 import AgentReasoningFeed from "./components/AgentReasoningFeed";
@@ -161,22 +162,26 @@ export default function App() {
           <SummaryRow summary={summary} />
           <div>
             <div className="mb-2 flex gap-1">
-              {["fleet", "map"].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className="meta border px-2 py-1 transition-colors"
-                  style={
-                    view === v
-                      ? { color: "var(--color-ink)", borderColor: "var(--color-ink)" }
-                      : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.12)" }
-                  }
-                >
-                  {v === "fleet" ? "Fleet" : "Carbon Map"}
-                </button>
-              ))}
+              {[["fleet", "Fleet"], ["map", "Carbon Map"], ["scaling", "Scaling"]].map(
+                ([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className="meta border px-2 py-1 transition-colors"
+                    style={
+                      view === v
+                        ? { color: "var(--color-ink)", borderColor: "var(--color-ink)" }
+                        : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.12)" }
+                    }
+                  >
+                    {label}
+                  </button>
+                )
+              )}
             </div>
-            {view === "fleet" ? <ServerGrid servers={state?.servers} /> : <RoutingMap />}
+            {view === "fleet" && <ServerGrid servers={state?.servers} />}
+            {view === "map" && <RoutingMap />}
+            {view === "scaling" && <ScalingBench servers={state?.servers} />}
           </div>
           <CarbonChart data={carbonHistory} status={status} />
         </section>

@@ -29,7 +29,8 @@
       "status": "healthy",
       "data_residency": "APAC",
       "dataset_size_gb": 800,
-      "asset_criticality": "critical"
+      "asset_criticality": "critical",
+      "replicas": 1
     },
     {
       "id": "fieldwire-api-prod",
@@ -60,7 +61,10 @@
       "status": "healthy",
       "data_residency": "none",
       "dataset_size_gb": 120,
-      "asset_criticality": "high"
+      "asset_criticality": "high",
+      "replicas": 4,
+      "latency_p95_ms": 95,
+      "latency_slo_ms": 200
     },
     {
       "id": "ontrack-asset-db",
@@ -92,7 +96,10 @@
       "status": "healthy",
       "data_residency": "EU",
       "dataset_size_gb": 400,
-      "asset_criticality": "high"
+      "asset_criticality": "high",
+      "replicas": 2,
+      "latency_p95_ms": 215,
+      "latency_slo_ms": 200
     },
     {
       "id": "nuron-iot-ingestion",
@@ -124,7 +131,10 @@
       "status": "healthy",
       "data_residency": "none",
       "dataset_size_gb": 200,
-      "asset_criticality": "medium"
+      "asset_criticality": "medium",
+      "replicas": 3,
+      "latency_p95_ms": 70,
+      "latency_slo_ms": 150
     },
     {
       "id": "profis-engineering-calc",
@@ -155,7 +165,8 @@
       "status": "healthy",
       "data_residency": "none",
       "dataset_size_gb": 50,
-      "asset_criticality": "high"
+      "asset_criticality": "high",
+      "replicas": 1
     },
     {
       "id": "sap-plm-sync",
@@ -186,7 +197,8 @@
       "status": "healthy",
       "data_residency": "EU",
       "dataset_size_gb": 300,
-      "asset_criticality": "high"
+      "asset_criticality": "high",
+      "replicas": 1
     },
     {
       "id": "bim-archive-render-02",
@@ -217,14 +229,15 @@
       "status": "warning",
       "data_residency": "APAC",
       "dataset_size_gb": 2000,
-      "asset_criticality": "medium"
+      "asset_criticality": "medium",
+      "replicas": 1
     },
     {
       "id": "blueline-staging-07",
       "role": "BlueLine Plumbing staging (zombie)",
       "region": "ap-southeast-3",
       "instance_type": "m6i.4xlarge",
-      "cpu_utilization": 1,
+      "cpu_utilization": 0,
       "gpu_utilization": 0,
       "runtime_hours_this_month": 720,
       "monthly_cost_usd": 1240,
@@ -241,10 +254,11 @@
       "owner_subcontractor": "BlueLine Plumbing",
       "subcontractor_contract_active": false,
       "scheduled_tasks": [],
-      "status": "warning",
+      "status": "hibernated",
       "data_residency": "none",
       "dataset_size_gb": 100,
-      "asset_criticality": "low"
+      "asset_criticality": "low",
+      "replicas": 1
     },
     {
       "id": "legacy-docs-share-03",
@@ -277,7 +291,8 @@
       "status": "warning",
       "data_residency": "none",
       "dataset_size_gb": 60,
-      "asset_criticality": "low"
+      "asset_criticality": "low",
+      "replicas": 1
     },
     {
       "id": "bim-render-prod-02",
@@ -285,19 +300,18 @@
       "region": "ap-southeast-1",
       "instance_type": "g5.4xlarge",
       "cpu_utilization": 18,
-      "gpu_utilization": 14,
+      "gpu_utilization": 13,
       "runtime_hours_this_month": 720,
       "monthly_cost_usd": 1850,
       "open_ports": [
-        443,
-        22
+        443
       ],
-      "ssh_exposed": true,
+      "ssh_exposed": false,
       "encrypted_at_rest": true,
       "iam_scope": "scoped",
       "mfa_enabled": true,
-      "failed_login_attempts_last_hour": 3,
-      "last_credential_rotation_days": 19,
+      "failed_login_attempts_last_hour": 0,
+      "last_credential_rotation_days": 0,
       "owner_subcontractor": "Acme HVAC",
       "subcontractor_contract_active": true,
       "scheduled_tasks": [
@@ -309,7 +323,8 @@
       "status": "healthy",
       "data_residency": "APAC",
       "dataset_size_gb": 600,
-      "asset_criticality": "critical"
+      "asset_criticality": "critical",
+      "replicas": 1
     }
   ],
   "project_gantt": {

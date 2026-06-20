@@ -5,11 +5,16 @@ const ACTION_COLOR = {
   Terminate: "#FF2D2D",
   Hibernate: "#5BA8FF",
   "Right-size": "#E0A106",
+  "Scale down": "#1FB57A",
+  "Scale up": "#E0A106",
   Relocate: "#1FB57A",
   "Time-shift": "#1FB57A",
   "Isolate & restore": "#C77DFF",
   "Harden config": "#9aa0aa",
 };
+
+// Action types that can be executed in one click.
+const EXECUTABLE = ["terminate", "hibernate", "scale_down", "scale_up"];
 
 // Correlated incidents, ranked. Each card shows the compound finding, the
 // recommended lifecycle ACTION per workload (terminate / hibernate / right-size
@@ -105,10 +110,21 @@ function IncidentCard({ inc, onApply, busy }) {
       )}
 
       {(savings > 0 || carbon > 0) && (
-        <div className="mt-2 flex gap-4">
+        <div className="mt-2 flex items-end gap-4">
           {savings > 0 && <Metric value={`$${savings.toLocaleString()}/mo`} label="saved" />}
           {carbon > 0 && <Metric value={`${carbon} kg`} label="CO2e prevented" />}
         </div>
+      )}
+
+      {/* single-click Apply for executable actions without a toggle */}
+      {options.length <= 1 && EXECUTABLE.includes(inc.action_type) && (
+        <button
+          onClick={() => onApply?.(inc.server_id, inc.action_type)}
+          disabled={busy}
+          className="meta mt-2 border border-white/40 px-2 py-1 font-bold hover:enabled:bg-white/10 disabled:opacity-40"
+        >
+          Apply {inc.action_label} ▸
+        </button>
       )}
     </div>
   );

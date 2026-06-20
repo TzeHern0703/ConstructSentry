@@ -23,6 +23,8 @@ Every detection function returns either None (no problem) or a finding dict:
 
 from __future__ import annotations
 
+import math
+
 from carbon_data import (
     get_carbon_intensity,
     get_intraday_shift,
@@ -341,19 +343,22 @@ def compute_server_carbon(server):
     This is the shared numeric basis for both the carbon agent's findings and
     the orchestrator's "$ saved + kg CO2e prevented" recommendations.
     """
-    power_kwh = estimate_power_kwh(server)
+    # Carbon and cost scale with the number of running replicas.
+    replicas = max(1, server.get("replicas", 1))
+    power_kwh = estimate_power_kwh(server) * replicas
     intensity = get_carbon_intensity(server["region"])
     carbon_kg = power_kwh * intensity.gco2_per_kwh / 1000.0
     pue = get_pue(server.get("region"), _utilization_fraction(server))
     return {
         "server_id": server["id"],
+        "replicas": replicas,
         "power_kwh": round(power_kwh, 1),
         "carbon_kg": round(carbon_kg, 1),
         "pue": pue,
         "intensity_gco2_kwh": intensity.gco2_per_kwh,
         "intensity_source": intensity.source,
         "intensity_label": intensity.label(),
-        "monthly_cost_usd": server.get("monthly_cost_usd", 0),
+        "monthly_cost_usd": server.get("monthly_cost_usd", 0) * replicas,
     }
 
 
@@ -480,11 +485,74 @@ def check_good_vs_bad_carbon(server):
     return None
 
 
+# Don't scale a workload below the headroom needed for this CPU level.
+SCALE_DOWN_CPU_CEILING = 70
+
+
+def _projected_latency(latency, replicas, target):
+    """Latency scales inversely with replica count (fixed load)."""
+    if target <= 0:
+        return latency
+    return round(latency * replicas / target)
+
+
+def check_scaling(server):
+    """Carbon-aware autoscaling: keep the FEWEST replicas that still meet the
+    latency SLO. Too many replicas for the load is carbon+cost waste (scale
+    down); a latency breach needs more capacity (scale up). This is what ties
+    carbon to real operations — carbon is minimized subject to the SLO."""
+    slo = server.get("latency_slo_ms")
+    if not slo:
+        return None  # not a horizontally-scalable workload
+    replicas = max(1, server.get("replicas", 1))
+    latency = server.get("latency_p95_ms", 0)
+    cpu = server.get("cpu_utilization", 0)
+    carbon = compute_server_carbon(server)
+    cost = carbon["monthly_cost_usd"]
+    co2 = carbon["carbon_kg"]
+
+    # Minimum replicas that keep p95 latency within the SLO.
+    target = max(1, math.ceil(latency * replicas / slo))
+
+    if target > replicas:
+        new_lat = _projected_latency(latency, replicas, target)
+        frac = (target - replicas) / replicas
+        return make_finding(
+            server, "SCALE_UP", "warning",
+            f"{server['id']} p95 latency {latency}ms breaches the {slo}ms SLO at "
+            f"{replicas} replicas. Scale up to {target} → ~{new_lat}ms (restores "
+            f"SLO): +${round(cost * frac):,}/mo, +{round(co2 * frac, 1)} kg CO2e/mo.",
+            "check_scaling", "carbon",
+            target_replicas=target, current_replicas=replicas,
+            latency_ms=latency, slo_ms=slo, projected_latency_ms=new_lat,
+            extra_cost_usd=round(cost * frac), extra_carbon_kg=round(co2 * frac, 1),
+            direction="up",
+        )
+
+    if target < replicas and cpu < SCALE_DOWN_CPU_CEILING:
+        new_lat = _projected_latency(latency, replicas, target)
+        frac = (replicas - target) / replicas
+        return make_finding(
+            server, "SCALE_DOWN", "warning",
+            f"{server['id']} runs {replicas} replicas at {latency}ms p95 — far "
+            f"under the {slo}ms SLO. Scale down to {target} → ~{new_lat}ms (still "
+            f"within SLO) and cut ~${round(cost * frac):,}/mo + "
+            f"{round(co2 * frac, 1)} kg CO2e/mo of over-capacity.",
+            "check_scaling", "carbon",
+            target_replicas=target, current_replicas=replicas,
+            latency_ms=latency, slo_ms=slo, projected_latency_ms=new_lat,
+            savings_usd=round(cost * frac), savings_kg=round(co2 * frac, 1),
+            direction="down",
+        )
+    return None
+
+
 CARBON_RULES = [
     check_over_provisioning,
     check_zombie,
     check_high_carbon_region,
     check_good_vs_bad_carbon,
+    check_scaling,
 ]
 
 

@@ -22,6 +22,7 @@ import attack_simulator
 import orchestrator
 import remediation
 import state_store
+import tools
 
 app = FastAPI(title="ConstructSentry API", version="1.0")
 
@@ -311,6 +312,14 @@ async def post_action(server_id: str, type: str):
                 srv["status"] = "hibernated"
                 srv["cpu_utilization"] = 0
                 srv["gpu_utilization"] = 0
+            elif type in ("scale_down", "scale_up"):
+                # Apply the SLO-driven target replica count + projected latency.
+                finding = tools.check_scaling(srv)
+                if not finding:
+                    return False
+                m = finding["metrics"]
+                srv["replicas"] = m["target_replicas"]
+                srv["latency_p95_ms"] = m["projected_latency_ms"]
             else:
                 return False
             state_store.save_state(state)

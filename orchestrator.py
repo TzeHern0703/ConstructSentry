@@ -86,6 +86,8 @@ ACTION_LABEL = {
     "terminate": "Terminate",
     "hibernate": "Hibernate",
     "right_size": "Right-size",
+    "scale_down": "Scale down",
+    "scale_up": "Scale up",
     "route": "Relocate",
     "time_shift": "Time-shift",
     "isolate_restore": "Isolate & restore",
@@ -166,7 +168,29 @@ def _recommend(category, server, carbon, finding_types, metrics):
                      chosen["savings_usd"], chosen["carbon_kg"])
         return chosen["action"], chosen["savings_usd"], chosen["carbon_kg"], wins, "terminate", opts
 
-    # pure_waste
+    # pure_waste — carbon-aware autoscaling takes priority (it's SLO-driven).
+    if "SCALE_DOWN" in finding_types:
+        tgt = metrics.get("target_replicas"); lat = metrics.get("projected_latency_ms")
+        slo = metrics.get("slo_ms")
+        saved_usd = metrics.get("savings_usd", 0); saved_co2 = metrics.get("savings_kg", 0.0)
+        action = (f"Scale down to {tgt} replicas — p95 stays ~{lat}ms, within the "
+                  f"{slo}ms SLO. Carbon-aware right-sizing to actual load.")
+        wins = _wins(f"Performance: ~{lat}ms < {slo}ms SLO (no breach)", saved_usd, saved_co2)
+        return action, saved_usd, saved_co2, wins, "scale_down", []
+
+    if "SCALE_UP" in finding_types:
+        tgt = metrics.get("target_replicas"); lat = metrics.get("projected_latency_ms")
+        slo = metrics.get("slo_ms"); cur_lat = metrics.get("latency_ms")
+        extra_usd = metrics.get("extra_cost_usd", 0); extra_co2 = metrics.get("extra_carbon_kg", 0.0)
+        action = (f"Scale up to {tgt} replicas to meet the {slo}ms latency SLO "
+                  f"(p95 {cur_lat}ms → ~{lat}ms).")
+        wins = [
+            f"Performance: p95 {cur_lat}ms → ~{lat}ms, SLO restored",
+            f"Cost: +${extra_usd:,}/mo (capacity to hold the SLO)",
+            f"Carbon: +{extra_co2} kg CO2e/mo (the price of meeting the SLO)",
+        ]
+        return action, 0, 0.0, wins, "scale_up", []
+
     if "ZOMBIE" in finding_types:
         opts = _lifecycle_options(server, carbon)
         # Still contracted AND has a scheduled task => it'll be used again =>
