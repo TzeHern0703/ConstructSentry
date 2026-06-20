@@ -23,6 +23,12 @@ import _env  # noqa: F401  (loads .env into os.environ on import)
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 
+# Grafilab Neo Cloud — OpenAI-compatible inference (hackathon sponsor credit).
+GRAFILAB_BASE_URL = os.environ.get(
+    "GRAFILAB_BASE_URL", "https://console-api.grafilab.ai/api/oai/v1"
+)
+DEFAULT_GRAFILAB_MODEL = os.environ.get("GRAFILAB_MODEL", "grafilab/qwen3.6-flash")
+
 
 @dataclass
 class ToolCall:
@@ -44,6 +50,8 @@ class LLMResponse:
 
 
 def _provider() -> str:
+    if os.environ.get("GRAFILAB_API_KEY", "").strip():
+        return "grafilab"
     if os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return "anthropic"
     if os.environ.get("GEMINI_API_KEY", "").strip() or os.environ.get(
@@ -61,10 +69,45 @@ def provider_label() -> str:
     """Human-readable label for the UI (honesty about what's driving reasoning)."""
     p = _provider()
     return {
+        "grafilab": f"Grafilab ({DEFAULT_GRAFILAB_MODEL})",
         "anthropic": f"Claude ({DEFAULT_ANTHROPIC_MODEL})",
         "gemini": f"Gemini ({DEFAULT_GEMINI_MODEL})",
         "offline": "offline (deterministic reasoning)",
     }[p]
+
+
+# --- Grafilab (OpenAI-compatible) ------------------------------------------
+
+def _call_grafilab(messages, tools, system, model, max_tokens) -> LLMResponse:
+    import requests
+
+    chat = []
+    if system:
+        chat.append({"role": "system", "content": system})
+    for m in messages:
+        content = m["content"] if isinstance(m["content"], str) else json.dumps(m["content"])
+        chat.append({"role": m["role"], "content": content})
+
+    resp = requests.post(
+        f"{GRAFILAB_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {os.environ.get('GRAFILAB_API_KEY','')}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model or DEFAULT_GRAFILAB_MODEL,
+            "messages": chat,
+            "max_tokens": max_tokens,
+            "temperature": 0.5,
+            # qwen3.6 is a reasoning model — disable "thinking" so it answers
+            # directly: fast (~3s) and no wasted reasoning tokens (saves credit).
+            "chat_template_kwargs": {"enable_thinking": False},
+        },
+        timeout=45,
+    )
+    resp.raise_for_status()
+    text = resp.json()["choices"][0]["message"]["content"]
+    return LLMResponse(text=text or "", provider="grafilab")
 
 
 # --- Anthropic -------------------------------------------------------------
@@ -143,6 +186,8 @@ def call_llm(messages, tools=None, system=None, model=None, max_tokens=1024) -> 
     """
     provider = _provider()
     try:
+        if provider == "grafilab":
+            return _call_grafilab(messages, tools, system, model, max_tokens)
         if provider == "anthropic":
             return _call_anthropic(messages, tools, system, model, max_tokens)
         if provider == "gemini":
