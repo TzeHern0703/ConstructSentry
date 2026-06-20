@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Check } from "lucide-react";
 // Latency-vs-SLO benchmark for horizontally-scalable workloads. Shows the agent
 // is tracking real performance (p95 latency, replicas) and right-sizing to the
 // SLO — the operational basis for carbon-aware autoscaling.
-export default function ScalingBench({ servers }) {
+export default function ScalingBench({ servers, onApply, busy }) {
   const scalable = (servers ?? []).filter((s) => s.latency_slo_ms);
   if (!scalable.length) return <div className="meta p-3">No scalable workloads.</div>;
 
@@ -12,14 +12,14 @@ export default function ScalingBench({ servers }) {
       <p className="meta mb-2">Latency vs SLO · replicas right-sized to the SLO</p>
       <div className="space-y-1.5">
         {scalable.map((s) => (
-          <Row key={s.id} s={s} />
+          <Row key={s.id} s={s} onApply={onApply} busy={busy} />
         ))}
       </div>
     </div>
   );
 }
 
-function Row({ s }) {
+function Row({ s, onApply, busy }) {
   const lat = s.latency_p95_ms;
   const slo = s.latency_slo_ms;
   const replicas = s.replicas ?? 1;
@@ -50,8 +50,8 @@ function Row({ s }) {
           title="SLO"
         />
       </div>
-      <div className="meta mt-1 flex items-center gap-1 normal-case tracking-normal">
-        {dir === "ok" && <><Check size={11} color="#1FB57A" /> optimal — {replicas} replicas</>}
+      <div className="meta mt-1 flex items-center gap-2 normal-case tracking-normal">
+        {dir === "ok" && <span className="flex items-center gap-1"><Check size={11} color="#1FB57A" /> optimal — {replicas} replicas</span>}
         {dir === "down" && (
           <span style={{ color: "#1FB57A" }} className="flex items-center gap-1">
             <ArrowDown size={11} /> scale {replicas}→{target} (carbon saved, still within SLO)
@@ -61,6 +61,15 @@ function Row({ s }) {
           <span style={{ color: "#E0A106" }} className="flex items-center gap-1">
             <ArrowUp size={11} /> scale {replicas}→{target} (restore SLO)
           </span>
+        )}
+        {dir !== "ok" && onApply && (
+          <button
+            onClick={() => onApply(s.id, dir === "up" ? "scale_up" : "scale_down")}
+            disabled={busy}
+            className="ml-auto border border-white/40 px-2 py-0.5 font-bold uppercase tracking-wider hover:enabled:bg-white/10 disabled:opacity-40"
+          >
+            Apply ▸
+          </button>
         )}
       </div>
     </div>

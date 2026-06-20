@@ -14,13 +14,19 @@ const ACTION_COLOR = {
 };
 
 // Action types that can be executed in one click.
-const EXECUTABLE = ["terminate", "hibernate", "scale_down", "scale_up"];
+const EXECUTABLE = ["terminate", "hibernate"];
+
+// Live autoscaling (scale up/down) fluctuates with load every poll, so it lives
+// in the Scaling tab — keeping the ranked Incidents list stable (real security /
+// carbon-waste findings only).
+const SCALING = ["scale_up", "scale_down"];
 
 // Correlated incidents, ranked. Each card shows the compound finding, the
 // recommended lifecycle ACTION per workload (terminate / hibernate / right-size
 // / route …), and — where the choice changes the result — a toggle so you can
 // switch terminate↔hibernate and watch the savings update.
 export default function IncidentList({ incidents, report, onApply, busy }) {
+  const shown = (incidents ?? []).filter((i) => !SCALING.includes(i.action_type));
   return (
     <div className="flex flex-1 flex-col border border-white/10 bg-[var(--color-panel)]">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
@@ -32,10 +38,10 @@ export default function IncidentList({ incidents, report, onApply, busy }) {
         )}
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3" style={{ maxHeight: "44vh" }}>
-        {(!incidents || incidents.length === 0) && (
+        {shown.length === 0 && (
           <p className="meta text-[var(--color-slate)]">No incidents.</p>
         )}
-        {incidents?.map((inc) => (
+        {shown.map((inc) => (
           <IncidentCard key={inc.server_id} inc={inc} onApply={onApply} busy={busy} />
         ))}
       </div>

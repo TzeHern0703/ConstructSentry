@@ -267,7 +267,7 @@ export default function App() {
             {view === "fleet" && <ServerGrid servers={state?.servers} />}
             {view === "efficiency" && <CarbonBreakdown />}
             {view === "map" && <RoutingMap />}
-            {view === "scaling" && <ScalingBench servers={state?.servers} />}
+            {view === "scaling" && <ScalingBench servers={state?.servers} onApply={onApply} busy={busy} />}
           </div>
           <CarbonChart data={carbonHistory} status={status} />
         </section>
