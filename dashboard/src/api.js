@@ -22,6 +22,8 @@ export const runScan = () => jpost("/api/scan");
 export const runAttack = () => jpost("/api/attack");
 export const runRemediate = () => jpost("/api/remediate");
 export const runReset = () => jpost("/api/reset");
+export const applyAction = (serverId, type) =>
+  jpost(`/api/action?server_id=${encodeURIComponent(serverId)}&type=${type}`);
 
 // Subscribe to the live agent-thought SSE stream. Returns the EventSource so
 // the caller can close it on unmount.

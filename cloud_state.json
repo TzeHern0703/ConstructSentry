@@ -284,19 +284,20 @@
       "role": "BIM rendering (attack target)",
       "region": "ap-southeast-1",
       "instance_type": "g5.4xlarge",
-      "cpu_utilization": 16,
-      "gpu_utilization": 13,
+      "cpu_utilization": 18,
+      "gpu_utilization": 14,
       "runtime_hours_this_month": 720,
       "monthly_cost_usd": 1850,
       "open_ports": [
-        443
+        443,
+        22
       ],
-      "ssh_exposed": false,
+      "ssh_exposed": true,
       "encrypted_at_rest": true,
       "iam_scope": "scoped",
       "mfa_enabled": true,
-      "failed_login_attempts_last_hour": 0,
-      "last_credential_rotation_days": 0,
+      "failed_login_attempts_last_hour": 3,
+      "last_credential_rotation_days": 19,
       "owner_subcontractor": "Acme HVAC",
       "subcontractor_contract_active": true,
       "scheduled_tasks": [

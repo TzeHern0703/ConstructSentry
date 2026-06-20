@@ -158,6 +158,8 @@ CYBER_RULES = [
 
 def run_cyber_checks(server, gantt=None):
     """Run every cyber rule against one server. Returns a list of findings."""
+    if server.get("status") == "hibernated":
+        return []  # stopped instance is out of the active attack surface
     findings = [rule(server) for rule in CYBER_RULES]
     findings.append(check_orphaned_access(server, gantt))
     return [f for f in findings if f is not None]
@@ -322,9 +324,12 @@ def estimate_power_kwh(server, include_pue=True):
     max_watts = INSTANCE_MAX_WATTS.get(
         server.get("instance_type"), DEFAULT_MAX_WATTS
     )
+    runtime = server.get("runtime_hours_this_month", 0)
+    # A hibernated (stopped) instance draws only its persistent disk (~3%).
+    if server.get("status") == "hibernated":
+        return max_watts * 0.03 * runtime / 1000.0
     util = _utilization_fraction(server)
     it_watts = max_watts * (IDLE_POWER_FLOOR + (1 - IDLE_POWER_FLOOR) * _power_fraction(util))
-    runtime = server.get("runtime_hours_this_month", 0)
     if include_pue:
         it_watts *= get_pue(server.get("region"), util)
     return it_watts * runtime / 1000.0
@@ -485,6 +490,8 @@ CARBON_RULES = [
 
 def run_carbon_checks(server):
     """Run every carbon rule against one server. Returns a list of findings."""
+    if server.get("status") == "hibernated":
+        return []  # already remediated — nothing to flag
     findings = [rule(server) for rule in CARBON_RULES]
     return [f for f in findings if f is not None]
 

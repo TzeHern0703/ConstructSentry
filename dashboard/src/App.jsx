@@ -7,6 +7,7 @@ import {
   runAttack,
   runRemediate,
   runReset,
+  applyAction,
 } from "./api";
 import { moodColor } from "./theme";
 import SummaryRow from "./components/SummaryRow";
@@ -96,6 +97,8 @@ export default function App() {
     };
   }
 
+  const onApply = (serverId, type) => withBusy(() => applyAction(serverId, type))();
+
   const onScan = withBusy(async () => {
     setHealReport(null);
     await runScan();
@@ -181,7 +184,12 @@ export default function App() {
         {/* RIGHT 40% */}
         <section className="flex flex-col gap-4 lg:col-span-2">
           <AgentReasoningFeed />
-          <IncidentList incidents={findings?.incidents} report={findings?.report} />
+          <IncidentList
+            incidents={findings?.incidents}
+            report={findings?.report}
+            onApply={onApply}
+            busy={busy}
+          />
         </section>
       </main>
 

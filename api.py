@@ -292,6 +292,39 @@ async def post_remediate(steps: str | None = None):
     }
 
 
+@app.post("/api/action")
+async def post_action(server_id: str, type: str):
+    """Execute a lifecycle action on a server (terminate | hibernate) so the
+    choice has a real, visible effect: terminate removes the instance; hibernate
+    stops its compute. State mutates, then findings/summary are recomputed."""
+    loop = asyncio.get_running_loop()
+
+    def do():
+        with state_store.transaction():
+            state = state_store.load_state()
+            srv = state_store.get_server(state, server_id)
+            if srv is None:
+                return False
+            if type == "terminate":
+                state["servers"] = [s for s in state["servers"] if s["id"] != server_id]
+            elif type == "hibernate":
+                srv["status"] = "hibernated"
+                srv["cpu_utilization"] = 0
+                srv["gpu_utilization"] = 0
+            else:
+                return False
+            state_store.save_state(state)
+            return True
+
+    ok = await loop.run_in_executor(None, do)
+    if ok:
+        broker.publish({"agent": "orchestrator", "phase": "act",
+                        "text": f"{type.capitalize()} applied to {server_id}.",
+                        "severity": "info"})
+    last = await loop.run_in_executor(None, lambda: _refresh())
+    return {"ok": ok, "summary": last["summary"], "findings": _findings_payload(last)}
+
+
 @app.post("/api/reset")
 async def post_reset():
     """Convenience for re-running the demo: restore the pristine baseline."""

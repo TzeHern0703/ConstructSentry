@@ -15,7 +15,7 @@ const ACTION_COLOR = {
 // recommended lifecycle ACTION per workload (terminate / hibernate / right-size
 // / route …), and — where the choice changes the result — a toggle so you can
 // switch terminate↔hibernate and watch the savings update.
-export default function IncidentList({ incidents, report }) {
+export default function IncidentList({ incidents, report, onApply, busy }) {
   return (
     <div className="flex flex-1 flex-col border border-white/10 bg-[var(--color-panel)]">
       <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
@@ -31,14 +31,14 @@ export default function IncidentList({ incidents, report }) {
           <p className="meta text-[var(--color-slate)]">No incidents.</p>
         )}
         {incidents?.map((inc) => (
-          <IncidentCard key={inc.server_id} inc={inc} />
+          <IncidentCard key={inc.server_id} inc={inc} onApply={onApply} busy={busy} />
         ))}
       </div>
     </div>
   );
 }
 
-function IncidentCard({ inc }) {
+function IncidentCard({ inc, onApply, busy }) {
   const color = severityColor(inc.severity);
   const options = inc.action_options ?? [];
   const [optIdx, setOptIdx] = useState(0);
@@ -72,23 +72,35 @@ function IncidentCard({ inc }) {
 
       <p className="mt-2 text-xs leading-snug text-[var(--color-ink)]/85">{action}</p>
 
-      {/* terminate ↔ hibernate toggle (only when options exist) */}
+      {/* terminate ↔ hibernate: compare options, then Apply for real */}
       {options.length > 1 && (
-        <div className="mt-2 flex gap-1">
-          {options.map((o, i) => (
+        <div className="mt-2">
+          <div className="flex items-center gap-1">
+            {options.map((o, i) => (
+              <button
+                key={o.type}
+                onClick={() => setOptIdx(i)}
+                className="meta border px-2 py-1 transition-colors"
+                style={
+                  i === optIdx
+                    ? { background: ACTION_COLOR[o.label], color: "#000", borderColor: ACTION_COLOR[o.label] }
+                    : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.15)" }
+                }
+              >
+                {o.label}
+              </button>
+            ))}
             <button
-              key={o.type}
-              onClick={() => setOptIdx(i)}
-              className="meta border px-2 py-1 transition-colors"
-              style={
-                i === optIdx
-                  ? { background: ACTION_COLOR[o.label], color: "#000", borderColor: ACTION_COLOR[o.label] }
-                  : { color: "var(--color-slate)", borderColor: "rgba(255,255,255,0.15)" }
-              }
+              onClick={() => onApply?.(inc.server_id, chosen.type)}
+              disabled={busy}
+              className="meta ml-auto border border-white/40 px-2 py-1 font-bold hover:enabled:bg-white/10 disabled:opacity-40"
             >
-              {o.label}
+              Apply ▸
             </button>
-          ))}
+          </div>
+          {chosen?.note && (
+            <div className="meta mt-1 normal-case tracking-normal opacity-70">{chosen.note}</div>
+          )}
         </div>
       )}
 

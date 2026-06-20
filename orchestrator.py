@@ -105,6 +105,7 @@ def _lifecycle_options(server, carbon):
             "savings_usd": cost, "carbon_kg": round(co2, 1),
             "action": f"Terminate {sid} — delete the instance and its volumes "
                       f"(it isn't needed again).",
+            "note": "Frees the most — but data is gone for good.",
         },
         {
             "type": "hibernate", "label": "Hibernate",
@@ -112,6 +113,7 @@ def _lifecycle_options(server, carbon):
             "carbon_kg": round(co2 * HIBERNATE_CARBON_RECOVERY, 1),
             "action": f"Hibernate {sid} — stop compute, keep the disk so it can "
                       f"wake on demand (small storage cost remains).",
+            "note": "Disk kept, wakes in minutes — slightly less saved.",
         },
     ]
 
