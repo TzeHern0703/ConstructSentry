@@ -280,7 +280,7 @@ below (Vite proxies `/api` to uvicorn).
 ## Built with AI tools
 
 This project was built with **[Claude Code](https://claude.com/claude-code)**
-(Anthropic's Claude Opus) used for architecture, implementation, and testing of
+(Anthropic's Claude Opus) used for implementation, and testing of
 both the backend agents and the dashboard. Agent reasoning at runtime is powered
-by the Claude API (with a Google Gemini option and an offline deterministic
+by the Grafilab API(sponsor by Grafilab!!) (with a Google Gemini option, claude api and an offline deterministic
 fallback).
